@@ -12,19 +12,21 @@ const PAGES = {
   relatorios:  { page: RelatoriosPage,   title: 'Relatórios' },
 };
 
+// Helper usado por outros módulos: Router.go('emprestimos')
+const Router = {
+  go(page) { location.hash = '#' + page; }
+};
+
 function navigate() {
   const hash = location.hash.replace('#', '') || 'dashboard';
   const entry = PAGES[hash] || PAGES.dashboard;
 
-  // Update topbar title
   document.getElementById('topbarTitle').textContent = entry.title;
 
-  // Update active nav item
   document.querySelectorAll('.nav-item').forEach(a => {
     a.classList.toggle('active', a.dataset.page === hash);
   });
 
-  // Render page
   if (entry.sub) {
     entry.page.render(entry.sub);
   } else {
@@ -40,8 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('.app-layout').classList.toggle('sidebar-collapsed');
   });
 
-  // Modal: close on backdrop click
-  document.getElementById('modalOverlay').addEventListener('click', e => {
+  // Modal: close on backdrop click (id is "modalBackdrop" in the HTML)
+  document.getElementById('modalBackdrop').addEventListener('click', e => {
     if (e.target === e.currentTarget) UI.closeModal();
   });
 

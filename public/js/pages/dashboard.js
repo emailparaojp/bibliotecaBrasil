@@ -3,7 +3,7 @@ const DashboardPage = (() => {
 
   function statCard(icon, colorClass, value, label, link = '') {
     const inner = `
-      <div class="stat-icon ${colorClass}"><i class="fa-solid ${icon}"></i></div>
+      <div class="stat-icon ${colorClass}"><i class="fa-solid fa-${icon}"></i></div>
       <div><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`;
     return link
       ? `<a href="${link}" class="stat-card" style="text-decoration:none">${inner}</a>`
