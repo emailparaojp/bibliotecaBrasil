@@ -1,17 +1,39 @@
-# 📚 Biblioteca Brasil API
+# 📚 Biblioteca Brasil
 
-Sistema completo de gerenciamento de biblioteca física, construído com **Node.js + Express + SQLite**.
+Sistema completo de gerenciamento de biblioteca física com **interface web** e **API REST**, construído com **Node.js + Express + SQLite**.
+
+## ✨ Funcionalidades
+
+- **Acervo** — cadastro de livros, exemplares físicos (tombos), autores, editoras e categorias
+- **Membros** — cadastro de membros (Estudante / Professor / Comum), renovação de matrícula, histórico
+- **Empréstimos** — controle de empréstimos com prazos por tipo de membro, renovações e devoluções
+- **Reservas** — fila de reservas com expiração automática
+- **Multas** — geração automática de multas por atraso, quitação individual ou em lote
+- **Relatórios** — dashboard, acervo por categoria/condição, ranking de livros, mapa financeiro, devoluções previstas
+- **Interface web** — SPA com navegação lateral, modais, filtros e paginação
 
 ## 🚀 Como rodar
 
 ```bash
 npm install
-npm start
-# ou, com hot-reload:
-npm run dev
+npm start        # produção
+npm run dev      # desenvolvimento (hot-reload)
 ```
 
-O servidor sobe em `http://localhost:3000`.
+Acesse **http://localhost:3000** no navegador para a interface web.
+A API REST está disponível em `http://localhost:3000/api/`.
+
+### Popular o banco de dados
+
+```bash
+# Seed básico (executado automaticamente na primeira inicialização)
+npm run seed
+
+# Seed rico — apaga tudo e popula com dados de demonstração completos:
+# 30 livros · 68 exemplares · 17 autores · 8 editoras · 12 categorias
+# 20 membros · 16 empréstimos · 6 reservas · 7 multas
+npm run seed:rich
+```
 
 ---
 
@@ -37,16 +59,35 @@ O servidor sobe em `http://localhost:3000`.
 ## 📦 Estrutura do projeto
 
 ```
-src/
-├── server.js          # Ponto de entrada
-├── app.js             # Configuração Express
-├── database/
-│   ├── index.js       # Conexão SQLite
-│   ├── migrations.js  # Schema do banco
-│   └── seed.js        # Dados de exemplo
-├── controllers/       # Lógica de negócio
-├── routes/            # Definição de rotas
-└── middleware/        # errorHandler, validate
+bibliotecaBrasil/
+├── public/                    # Front-end (SPA estática)
+│   ├── index.html             # Shell da aplicação
+│   ├── css/
+│   │   └── style.css          # Estilos completos
+│   └── js/
+│       ├── api.js             # Cliente HTTP para todos os endpoints
+│       ├── ui.js              # Componentes reutilizáveis (toast, modal, tabela…)
+│       ├── main.js            # Roteador hash-based e navegação
+│       └── pages/
+│           ├── dashboard.js   # Visão geral do sistema
+│           ├── livros.js      # Acervo + exemplares
+│           ├── membros.js     # Gestão de membros
+│           ├── emprestimos.js # Empréstimos, devoluções e renovações
+│           ├── reservas.js    # Fila de reservas
+│           ├── multas.js      # Controle de multas
+│           ├── relatorios.js  # Relatórios e estatísticas
+│           └── catalogo.js    # CRUD de autores, editoras e categorias
+└── src/
+    ├── server.js              # Ponto de entrada
+    ├── app.js                 # Configuração Express + servir SPA
+    ├── database/
+    │   ├── index.js           # Conexão SQLite (WAL + FK)
+    │   ├── migrations.js      # Schema (8 tabelas, 12 índices)
+    │   ├── seed.js            # Seed básico (12 livros, 8 membros)
+    │   └── seedRich.js        # Seed de demonstração (30 livros, 20 membros…)
+    ├── controllers/           # Lógica de negócio
+    ├── routes/                # Definição de rotas + validação
+    └── middleware/            # errorHandler, validate
 ```
 
 ---
@@ -255,25 +296,40 @@ autores ──< livros >── editoras
 
 ```
 1. Cadastrar autores, editoras, categorias
-2. Cadastrar livros e seus exemplares
+2. Cadastrar livros e seus exemplares físicos (tombos)
 3. Cadastrar membros
-4. Realizar empréstimo: POST /api/emprestimos
-5. Devolver livro: PATCH /api/emprestimos/:id/devolver
-   → Multa gerada automaticamente se atrasado
-6. Pagar multa: PATCH /api/multas/:id/pagar
-7. Se livro indisponível: POST /api/reservas
-8. Consultar dashboar: GET /api/relatorios/dashboard
+4. Realizar empréstimo:    POST /api/emprestimos
+5. Devolver livro:         PATCH /api/emprestimos/:id/devolver
+   → Multa gerada automaticamente se atrasado (R$ 0,50/dia)
+6. Pagar multa:            PATCH /api/multas/:id/pagar
+7. Se livro indisponível:  POST /api/reservas
+8. Consultar dashboard:    GET  /api/relatorios/dashboard
 ```
+
+### Regras de negócio principais
+
+| Tipo membro  | Prazo padrão | Máx. simultâneos | Renovações |
+|---|---|---|---|
+| Estudante    | 7 dias       | 3                | 2          |
+| Professor    | 14 dias      | 5                | 2          |
+| Comum        | 7 dias       | 2                | 2          |
+
+- Membro deve estar **ativo** e com **matrícula válida** para emprestar
+- Membro com **multa pendente** não pode realizar novos empréstimos
+- Renovação **bloqueada** se houver reserva ativa para o livro
+- Reservas expiram automaticamente após `DIAS_RESERVA` dias
+- Devolução marca a reserva seguinte como disponível para retirada
 
 ---
 
 ## 🛠️ Tecnologias
 
 - **Node.js** v18+
-- **Express** — framework HTTP
-- **better-sqlite3** — banco de dados SQLite síncrono
-- **express-validator** — validação de entrada
-- **helmet** — segurança HTTP headers
+- **Express 5** — framework HTTP
+- **better-sqlite3** — banco de dados SQLite síncrono e performático
+- **express-validator** — validação e sanitização de entrada
+- **helmet** — cabeçalhos de segurança HTTP
 - **cors** — Cross-Origin Resource Sharing
 - **morgan** — logging de requisições
 - **dotenv** — variáveis de ambiente
+- **Vanilla JS** — front-end sem framework ou bundler (SPA com hash routing)
