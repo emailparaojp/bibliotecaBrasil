@@ -39,6 +39,7 @@ const livrosController = {
     const livros = db.prepare(`
       SELECT l.id, l.isbn, l.titulo, l.subtitulo, l.ano_publicacao, l.edicao,
              l.num_paginas, l.idioma, l.localizacao, l.descricao, l.capa_url,
+             (CASE WHEN l.capa_base64 IS NOT NULL OR l.capa_url IS NOT NULL THEN 1 ELSE 0 END) AS tem_capa,
              a.id as autor_id, a.nome as autor_nome,
              ed.id as editora_id, ed.nome as editora_nome,
              c.id as categoria_id, c.nome as categoria_nome,

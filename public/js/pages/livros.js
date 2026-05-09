@@ -56,7 +56,7 @@ const LivrosPage = (() => {
         livros,
         r => `
           <td style="width:52px;">
-            ${r.capa_url
+            ${r.tem_capa
               ? `<img src="/api/livros/${r.id}/capa" style="width:40px;height:54px;object-fit:cover;border-radius:4px;" loading="lazy">`
               : `<div style="width:40px;height:54px;background:#e0e7ff;border-radius:4px;display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-book" style="color:#a5b4fc;font-size:.9rem;"></i></div>`}
           </td>
@@ -235,6 +235,8 @@ const LivrosPage = (() => {
     const data = UI.formData(form);
     // convert numerics
     ['id_autor','id_editora','id_categoria','ano_publicacao','num_paginas'].forEach(k => { if(data[k]) data[k] = Number(data[k]); });
+    // Don't overwrite existing capa if no new image was selected
+    if (!data.capa_base64) { delete data.capa_base64; delete data.capa_mime; }
 
     const btn = document.querySelector('#modalFooter .btn-primary');
     btn.disabled = true;

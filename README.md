@@ -1,6 +1,10 @@
 # 📚 Biblioteca Brasil
 
+> **Projeto open source · Uso livre e gratuito**
+
 Sistema completo de gerenciamento de biblioteca física com **portal público**, **painel administrativo** e **API REST**, construído com **Node.js + Express + SQLite**.
+
+Criado para ajudar pequenas bibliotecas — escolares, comunitárias, paroquiais e municipais — a organizarem seus acervos de forma moderna, sem custo algum. Qualquer biblioteca pode usar, copiar, modificar e distribuir este software livremente. Se precisar de ajuda para instalar ou adaptar o sistema, podemos ajudar.
 
 ## ✨ Funcionalidades
 
@@ -439,3 +443,65 @@ autores ──< livros >── editoras
 - **morgan** — logging de requisições
 - **dotenv / dotenvx** — variáveis de ambiente
 - **Vanilla JS** — front-end sem framework ou bundler (2 SPAs com hash routing)
+
+---
+
+## 🌐 Projeto Open Source
+
+O **BibliotecaBrasil** é um software **gratuito e de código aberto**, criado para democratizar o acesso a ferramentas de gestão de acervo para pequenas bibliotecas brasileiras.
+
+### Licença
+
+Distribuído sob a licença **MIT** — você pode usar, copiar, modificar e distribuir este software livremente, inclusive para fins comerciais, sem qualquer custo ou obrigação.
+
+### Por que open source?
+
+Acreditamos que toda biblioteca — seja ela escolar, comunitária, paroquial ou municipal — merece ter acesso a um sistema de gestão profissional, independentemente do tamanho ou orçamento. Ao disponibilizar este projeto como software livre, queremos contribuir para que mais comunidades tenham acesso ao conhecimento de forma organizada.
+
+### Precisa de ajuda?
+
+O sistema é de livre instalação, mas sabemos que nem toda biblioteca tem um técnico disponível. Se precisar de apoio para:
+
+- Instalar e configurar o sistema
+- Hospedar em servidor ou nuvem
+- Adaptar funcionalidades para a sua realidade
+- Treinar a equipe para uso do painel
+
+Entre em contato através do repositório no GitHub — podemos ajudar.
+
+### Apoie o projeto
+
+Se este projeto foi útil para sua biblioteca e você quiser contribuir financeiramente para manter o desenvolvimento, aceitamos doações via Pix:
+
+**Chave Pix:** `pixdojp@gmail.com`
+
+Qualquer valor é bem-vindo e ajuda a manter o projeto ativo! 🙏
+
+[![GitHub](https://img.shields.io/badge/GitHub-bibliotecaBrasil-181717?logo=github)](https://github.com/emailparaojp/bibliotecaBrasil)
+
+### Apoie o projeto
+
+Se o BibliotecaBrasil foi útil para você ou sua biblioteca, considere fazer uma contribuição simbólica via Pix. Isso ajuda a manter o projeto ativo e a desenvolver novas funcionalidades.
+
+> **Chave Pix:** `pixdojp@gmail.com`
+
+Qualquer valor é muito bem-vindo! 🙏
+
+### Contribuindo
+
+Contribuições são muito bem-vindas! Para colaborar:
+
+```bash
+# 1. Fork o repositório
+# 2. Crie uma branch para sua feature
+git checkout -b minha-feature
+
+# 3. Faça suas alterações e commit
+git commit -m "feat: minha melhoria"
+
+# 4. Abra um Pull Request
+```
+
+Sugestões de melhorias, reportes de bugs e pedidos de funcionalidades podem ser feitos via [Issues no GitHub](https://github.com/emailparaojp/bibliotecaBrasil/issues).
+
+## Este é um projeto de código aberto para ajudar pequenas bibliotecas a controlarem seu acervo. Isso é gratuito e auxiliamos na implementação

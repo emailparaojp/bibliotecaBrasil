@@ -26,6 +26,11 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'admin.html'));
 });
 
+// Página Sobre
+app.get('/sobre', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'sobre.html'));
+});
+
 // Rotas públicas / portal de membros
 app.use('/api/auth',    require('./routes/auth'));
 app.use('/api/portal',  require('./routes/portal'));

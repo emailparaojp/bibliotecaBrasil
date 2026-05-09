@@ -88,6 +88,7 @@ body {
   transition: margin-left 0.25s ease;
 }
 .main-wrapper.expanded { margin-left: 0; }
+.app-layout.sidebar-collapsed .main-wrapper { margin-left: 0; }
 
 /* ===== TOPBAR ===== */
 .topbar {
@@ -109,7 +110,8 @@ body {
   color: #1e293b;
   flex: 1;
 }
-.topbar-actions { display: flex; align-items: center; gap: 0.5rem; }
+.topbar-actions { display: flex; align-items: center; gap: 0.5rem; flex: 1; }
+.topbar-end { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; flex-shrink: 0; }
 
 /* ===== MAIN CONTENT ===== */
 .main-content {
