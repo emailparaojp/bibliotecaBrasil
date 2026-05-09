@@ -1,16 +1,25 @@
 # 📚 Biblioteca Brasil
 
-Sistema completo de gerenciamento de biblioteca física com **interface web** e **API REST**, construído com **Node.js + Express + SQLite**.
+Sistema completo de gerenciamento de biblioteca física com **portal público**, **painel administrativo** e **API REST**, construído com **Node.js + Express + SQLite**.
 
 ## ✨ Funcionalidades
 
-- **Acervo** — cadastro de livros, exemplares físicos (tombos), autores, editoras e categorias
-- **Membros** — cadastro de membros (Estudante / Professor / Comum), renovação de matrícula, histórico
+### Portal Público (`/`)
+- **Pesquisa do acervo** — busca de livros por título, autor, categoria ou ISBN sem necessidade de login
+- **Disponibilidade em tempo real** — visualização de quantos exemplares estão disponíveis para cada livro
+- **Reserva online** — usuários autenticados podem reservar um exemplar diretamente pelo portal
+- **Cadastro de usuários** — registro com CPF (validado algoritmicamente), nome, e-mail e senha
+- **Minha Área** — histórico de reservas, status (Ativa / Atendida / Cancelada / Expirada) e opção de cancelamento
+- **Login unificado** — membros `admin` e `bibliotecário` são automaticamente redirecionados para `/admin`
+
+### Painel Administrativo (`/admin`)
+- **Acervo** — cadastro de livros (com capa armazenada no banco de dados em Base64), exemplares físicos (tombos), autores, editoras e categorias
+- **Membros** — cadastro de membros (Estudante / Professor / Comum), renovação de matrícula, histórico de empréstimos e **gerenciamento de perfil de acesso** (promover para Bibliotecário ou Administrador)
 - **Empréstimos** — controle de empréstimos com prazos por tipo de membro, renovações e devoluções
 - **Reservas** — fila de reservas com expiração automática
-- **Multas** — geração automática de multas por atraso, quitação individual ou em lote
-- **Relatórios** — dashboard, acervo por categoria/condição, ranking de livros, mapa financeiro, devoluções previstas
-- **Interface web** — SPA com navegação lateral, modais, filtros e paginação
+- **Multas** — geração automática por atraso, quitação individual ou em lote
+- **Relatórios** — dashboard com cards de resumo, acervo por categoria/condição, ranking de livros, mapa financeiro e devoluções previstas
+- **Controle de acesso** — área restrita a usuários com perfil `admin` ou `bibliotecario`; autenticação via CPF + senha com JWT
 
 ## 🚀 Como rodar
 
@@ -20,8 +29,20 @@ npm start        # produção
 npm run dev      # desenvolvimento (hot-reload)
 ```
 
-Acesse **http://localhost:3000** no navegador para a interface web.
-A API REST está disponível em `http://localhost:3000/api/`.
+| Interface | URL |
+|---|---|
+| Portal público | http://localhost:3000 |
+| Painel administrativo | http://localhost:3000/admin |
+| API REST | http://localhost:3000/api/ |
+
+### Usuário administrador padrão
+
+| Campo | Valor |
+|---|---|
+| CPF | `101.010.101-01` |
+| Senha | `administrador123` |
+
+> Este usuário é criado automaticamente na primeira inicialização. Troque a senha após o primeiro acesso.
 
 ### Popular o banco de dados
 
@@ -31,7 +52,7 @@ npm run seed
 
 # Seed rico — apaga tudo e popula com dados de demonstração completos:
 # 30 livros · 68 exemplares · 17 autores · 8 editoras · 12 categorias
-# 20 membros · 16 empréstimos · 6 reservas · 7 multas
+# 21 membros (incluindo admin padrão) · 16 empréstimos · 6 reservas · 7 multas
 npm run seed:rich
 ```
 
@@ -43,6 +64,7 @@ npm run seed:rich
 |---|---|---|
 | `PORT` | `3000` | Porta do servidor |
 | `DB_PATH` | `./biblioteca.db` | Caminho do banco SQLite |
+| `JWT_SECRET` | *(gerado)* | Chave para assinatura dos tokens JWT |
 | `MULTA_DIARIA` | `0.50` | Valor da multa por dia de atraso (R$) |
 | `DIAS_EMPRESTIMO_ESTUDANTE` | `7` | Prazo de empréstimo para estudantes |
 | `DIAS_EMPRESTIMO_PROFESSOR` | `14` | Prazo de empréstimo para professores |
@@ -60,34 +82,41 @@ npm run seed:rich
 
 ```
 bibliotecaBrasil/
-├── public/                    # Front-end (SPA estática)
-│   ├── index.html             # Shell da aplicação
+├── public/                      # Front-end estático
+│   ├── index.html               # Portal público (SPA)
+│   ├── admin.html               # Painel administrativo (SPA)
 │   ├── css/
-│   │   └── style.css          # Estilos completos
+│   │   └── style.css            # Estilos compartilhados
 │   └── js/
-│       ├── api.js             # Cliente HTTP para todos os endpoints
-│       ├── ui.js              # Componentes reutilizáveis (toast, modal, tabela…)
-│       ├── main.js            # Roteador hash-based e navegação
+│       ├── api.js               # Cliente HTTP para todos os endpoints
+│       ├── ui.js                # Componentes reutilizáveis (toast, modal, tabela…)
+│       ├── main.js              # Roteador do painel admin (hash-based)
+│       ├── portal-ui.js         # Utilitários do portal público
 │       └── pages/
-│           ├── dashboard.js   # Visão geral do sistema
-│           ├── livros.js      # Acervo + exemplares
-│           ├── membros.js     # Gestão de membros
-│           ├── emprestimos.js # Empréstimos, devoluções e renovações
-│           ├── reservas.js    # Fila de reservas
-│           ├── multas.js      # Controle de multas
-│           ├── relatorios.js  # Relatórios e estatísticas
-│           └── catalogo.js    # CRUD de autores, editoras e categorias
+│           ├── dashboard.js     # Visão geral do sistema
+│           ├── livros.js        # Acervo + exemplares
+│           ├── membros.js       # Gestão de membros + gerenciamento de perfil
+│           ├── emprestimos.js   # Empréstimos, devoluções e renovações
+│           ├── reservas.js      # Fila de reservas
+│           ├── multas.js        # Controle de multas
+│           ├── relatorios.js    # Relatórios e estatísticas
+│           ├── catalogo.js      # CRUD de autores, editoras e categorias
+│           ├── portal-home.js   # Home do portal público (busca + resultado)
+│           ├── portal-login.js  # Login/cadastro do portal + redirect admin
+│           └── portal-minha-area.js  # Área do membro (reservas, histórico)
 └── src/
-    ├── server.js              # Ponto de entrada
-    ├── app.js                 # Configuração Express + servir SPA
+    ├── server.js                # Ponto de entrada
+    ├── app.js                   # Configuração Express + servir SPAs
     ├── database/
-    │   ├── index.js           # Conexão SQLite (WAL + FK)
-    │   ├── migrations.js      # Schema (8 tabelas, 12 índices)
-    │   ├── seed.js            # Seed básico (12 livros, 8 membros)
-    │   └── seedRich.js        # Seed de demonstração (30 livros, 20 membros…)
-    ├── controllers/           # Lógica de negócio
-    ├── routes/                # Definição de rotas + validação
-    └── middleware/            # errorHandler, validate
+    │   ├── index.js             # Conexão SQLite (WAL + FK)
+    │   ├── migrations.js        # Schema + migrações incrementais + admin padrão
+    │   ├── seed.js              # Seed básico (12 livros, 8 membros)
+    │   └── seedRich.js          # Seed de demonstração (30 livros, 21 membros…)
+    ├── controllers/             # Lógica de negócio
+    ├── routes/                  # Definição de rotas + validação
+    ├── middleware/              # errorHandler, validate, auth JWT
+    └── utils/
+        └── cpf.js               # Validação de CPF (algoritmo dígitos verificadores)
 ```
 
 ---
@@ -106,6 +135,16 @@ autores ──< livros >── editoras
             multas          reservas
 ```
 
+**Tabela `membros`** — campos relevantes:
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `cpf` | TEXT (único) | CPF formatado `xxx.xxx.xxx-xx` |
+| `tipo` | TEXT | `Estudante`, `Professor` ou `Comum` |
+| `perfil` | TEXT | `admin`, `bibliotecario` ou NULL (sem acesso admin) |
+| `senha_hash` | TEXT | Senha bcrypt (para login no portal e painel admin) |
+| `ativo` | INT | `1` = ativo, `0` = inativo |
+
 ---
 
 ## 📡 Endpoints
@@ -114,6 +153,52 @@ autores ──< livros >── editoras
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/health` | Status da API |
+
+---
+
+### 🔐 Autenticação do Portal — `/api/auth`
+| Método | Rota | Descrição |
+|---|---|---|
+| POST | `/api/auth/register` | Cadastrar novo membro no portal |
+| POST | `/api/auth/login` | Login com CPF + senha; retorna JWT + perfil |
+
+**POST `/api/auth/register` body:**
+```json
+{
+  "nome": "João Silva",
+  "cpf": "111.444.777-35",
+  "email": "joao@email.com",
+  "senha": "minhasenha123",
+  "tipo": "Estudante"
+}
+```
+
+**POST `/api/auth/login` body:**
+```json
+{ "cpf": "111.444.777-35", "senha": "minhasenha123" }
+```
+
+---
+
+### 🛡️ Autenticação do Admin — `/api/admin`
+| Método | Rota | Descrição |
+|---|---|---|
+| POST | `/api/admin/login` | Login com CPF + senha; exige perfil `admin` ou `bibliotecario` |
+
+> Todos os endpoints do painel admin exigem header `Authorization: Bearer <token>`
+
+---
+
+### 🌐 Portal Público — `/api/portal`
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | `/api/portal/livros` | Buscar livros no acervo (query: `busca`, `categoria`, `disponivel`) |
+| GET | `/api/portal/livros/:id` | Detalhes + exemplares disponíveis |
+| GET | `/api/portal/livros/:id/capa` | Imagem da capa (JPEG/PNG servida do banco) |
+| GET | `/api/portal/categorias` | Listar categorias para filtro |
+| POST | `/api/portal/reservas` | Criar reserva (requer JWT de membro) |
+| GET | `/api/portal/minha-area` | Reservas do membro autenticado |
+| DELETE | `/api/portal/reservas/:id` | Cancelar reserva (requer JWT de membro) |
 
 ---
 
@@ -202,6 +287,7 @@ autores ──< livros >── editoras
 | PUT | `/api/membros/:id` | Atualizar dados |
 | PATCH | `/api/membros/:id/renovar-matricula` | Renovar matrícula |
 | PATCH | `/api/membros/:id/status` | Ativar/inativar |
+| PATCH | `/api/membros/:id/perfil` | Alterar perfil de acesso admin |
 | GET | `/api/membros/:id/historico` | Histórico de empréstimos |
 
 **POST body:**
@@ -215,6 +301,12 @@ autores ──< livros >── editoras
   "tipo": "Estudante"
 }
 ```
+
+**PATCH `/api/membros/:id/perfil` body:**
+```json
+{ "perfil": "bibliotecario" }
+```
+> Valores válidos: `"admin"`, `"bibliotecario"`, `"nenhum"` (remove acesso admin)
 
 **Tipos de membro:** `Estudante`, `Professor`, `Comum`
 
@@ -294,16 +386,28 @@ autores ──< livros >── editoras
 
 ## 🔄 Fluxo típico de uso
 
+### Administrador / Bibliotecário
 ```
-1. Cadastrar autores, editoras, categorias
-2. Cadastrar livros e seus exemplares físicos (tombos)
-3. Cadastrar membros
-4. Realizar empréstimo:    POST /api/emprestimos
-5. Devolver livro:         PATCH /api/emprestimos/:id/devolver
+1. Acessar /admin → login com CPF + senha
+2. Cadastrar autores, editoras, categorias
+3. Cadastrar livros (com capa) e seus exemplares físicos (tombos)
+4. Cadastrar membros ou aguardar auto-cadastro pelo portal
+5. Promover membros a Bibliotecário/Admin:  PATCH /api/membros/:id/perfil
+6. Realizar empréstimo:    POST /api/emprestimos
+7. Devolver livro:         PATCH /api/emprestimos/:id/devolver
    → Multa gerada automaticamente se atrasado (R$ 0,50/dia)
-6. Pagar multa:            PATCH /api/multas/:id/pagar
-7. Se livro indisponível:  POST /api/reservas
-8. Consultar dashboard:    GET  /api/relatorios/dashboard
+8. Pagar multa:            PATCH /api/multas/:id/pagar
+9. Consultar dashboard:    GET  /api/relatorios/dashboard
+```
+
+### Membro via Portal Público
+```
+1. Acessar / → pesquisar livros (sem login)
+2. Cadastrar-se com CPF, nome, e-mail e senha
+3. Fazer login → verificar disponibilidade
+4. Reservar exemplar:  POST /api/portal/reservas
+5. Acompanhar reservas em "Minha Área"
+6. Cancelar reserva se necessário
 ```
 
 ### Regras de negócio principais
@@ -327,9 +431,11 @@ autores ──< livros >── editoras
 - **Node.js** v18+
 - **Express 5** — framework HTTP
 - **better-sqlite3** — banco de dados SQLite síncrono e performático
+- **bcryptjs** — hash de senhas
+- **jsonwebtoken** — autenticação JWT (portal e painel admin)
 - **express-validator** — validação e sanitização de entrada
 - **helmet** — cabeçalhos de segurança HTTP
 - **cors** — Cross-Origin Resource Sharing
 - **morgan** — logging de requisições
-- **dotenv** — variáveis de ambiente
-- **Vanilla JS** — front-end sem framework ou bundler (SPA com hash routing)
+- **dotenv / dotenvx** — variáveis de ambiente
+- **Vanilla JS** — front-end sem framework ou bundler (2 SPAs com hash routing)

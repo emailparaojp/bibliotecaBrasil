@@ -1,9 +1,9 @@
-function perfilBadge(perfil) {
-  if (perfil === 'admin')        return '<span class="badge" style="background:#6366f1;color:#fff">Admin</span>';
-  if (perfil === 'bibliotecario') return '<span class="badge" style="background:#0891b2;color:#fff">Bibliotecário</span>';
-  return '<span class="text-muted" style="font-size:.8rem">—</span>';
-}
-
+const MembrosPage = (() => {
+  function perfilBadge(perfil) {
+    if (perfil === 'admin')        return '<span class="badge" style="background:#6366f1;color:#fff">Admin</span>';
+    if (perfil === 'bibliotecario') return '<span class="badge" style="background:#0891b2;color:#fff">Bibliotecário</span>';
+    return '<span class="text-muted" style="font-size:.8rem">—</span>';
+  }
 
   let state = { busca: '', tipo: '', ativo: '', page: 1, limit: 15 };
 
