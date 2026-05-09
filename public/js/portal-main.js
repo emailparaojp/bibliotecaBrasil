@@ -97,8 +97,25 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('portalModalClose')?.addEventListener('click', () => PUI.closeModal());
 
-  // Admin link
-  document.querySelector('.portal-brand')?.addEventListener('click', () => {});
+  // Hamburger menu toggle (mobile)
+  const hamburger = document.getElementById('portalHamburger');
+  const portalNav = document.querySelector('.portal-nav');
+  const headerActions = document.getElementById('headerActions');
+  hamburger?.addEventListener('click', () => {
+    const isOpen = portalNav.classList.toggle('open');
+    headerActions?.classList.toggle('open', isOpen);
+    hamburger.innerHTML = isOpen
+      ? '<i class="fa-solid fa-xmark"></i>'
+      : '<i class="fa-solid fa-bars"></i>';
+  });
+  // Close menu when a nav link is clicked
+  portalNav?.addEventListener('click', e => {
+    if (e.target.closest('.pnav-link')) {
+      portalNav.classList.remove('open');
+      headerActions?.classList.remove('open');
+      if (hamburger) hamburger.innerHTML = '<i class="fa-solid fa-bars"></i>';
+    }
+  });
 
   window.addEventListener('hashchange', navigate);
   updateHeaderActions();
