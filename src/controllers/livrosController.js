@@ -92,16 +92,19 @@ const livrosController = {
   criar(req, res) {
     const db = getDb();
     const { isbn, titulo, subtitulo, id_autor, id_editora, id_categoria,
-            ano_publicacao, edicao, num_paginas, idioma, localizacao, descricao, capa_url } = req.body;
+            ano_publicacao, edicao, num_paginas, idioma, localizacao, descricao,
+            capa_url, capa_base64, capa_mime } = req.body;
 
     try {
       const result = db.prepare(`
         INSERT INTO livros (isbn, titulo, subtitulo, id_autor, id_editora, id_categoria,
-          ano_publicacao, edicao, num_paginas, idioma, localizacao, descricao, capa_url)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ano_publicacao, edicao, num_paginas, idioma, localizacao, descricao, capa_url,
+          capa_mime, capa_base64)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(isbn || null, titulo, subtitulo || null, id_autor || null, id_editora || null,
              id_categoria || null, ano_publicacao || null, edicao || null, num_paginas || null,
-             idioma || 'Português', localizacao || null, descricao || null, capa_url || null);
+             idioma || 'Português', localizacao || null, descricao || null, capa_url || null,
+             capa_mime || 'image/jpeg', capa_base64 || null);
 
       res.status(201).json({ id: result.lastInsertRowid, titulo });
     } catch (e) {
@@ -116,7 +119,8 @@ const livrosController = {
     if (!atual) return res.status(404).json({ erro: 'Livro não encontrado.' });
 
     const campos = ['isbn', 'titulo', 'subtitulo', 'id_autor', 'id_editora', 'id_categoria',
-                    'ano_publicacao', 'edicao', 'num_paginas', 'idioma', 'localizacao', 'descricao', 'capa_url'];
+                    'ano_publicacao', 'edicao', 'num_paginas', 'idioma', 'localizacao', 'descricao',
+                    'capa_url', 'capa_mime', 'capa_base64'];
     const sets = campos.map(c => `${c} = ?`).join(', ');
     const values = campos.map(c => req.body[c] !== undefined ? req.body[c] : atual[c]);
 
@@ -127,6 +131,26 @@ const livrosController = {
       if (e.message.includes('UNIQUE')) return res.status(409).json({ erro: 'ISBN já cadastrado em outro livro.' });
       throw e;
     }
+  },
+
+  /* GET /api/livros/:id/capa — serve cover image from DB */
+  servirCapa(req, res) {
+    const db = getDb();
+    const livro = db.prepare('SELECT capa_base64, capa_mime, capa_url FROM livros WHERE id = ?').get(req.params.id);
+    if (!livro) return res.status(404).json({ erro: 'Livro não encontrado.' });
+
+    if (livro.capa_base64) {
+      const buf = Buffer.from(livro.capa_base64, 'base64');
+      res.set('Content-Type', livro.capa_mime || 'image/jpeg');
+      res.set('Cache-Control', 'public, max-age=86400');
+      return res.send(buf);
+    }
+
+    if (livro.capa_url) {
+      return res.redirect(livro.capa_url);
+    }
+
+    res.status(404).json({ erro: 'Capa não disponível.' });
   },
 
   remover(req, res) {

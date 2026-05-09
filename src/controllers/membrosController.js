@@ -131,6 +131,23 @@ const membrosController = {
     res.json({ mensagem: `Membro ${req.body.ativo ? 'ativado' : 'inativado'} com sucesso.` });
   },
 
+  alterarPerfil(req, res) {
+    const db = getDb();
+    const membro = db.prepare('SELECT id, cpf, perfil FROM membros WHERE id = ?').get(req.params.id);
+    if (!membro) return res.status(404).json({ erro: 'Membro não encontrado.' });
+
+    const PERFIS_VALIDOS = [null, 'admin', 'bibliotecario'];
+    const perfil = req.body.perfil === '' || req.body.perfil === 'nenhum' ? null : req.body.perfil;
+
+    if (!PERFIS_VALIDOS.includes(perfil)) {
+      return res.status(400).json({ erro: 'Perfil inválido. Use: admin, bibliotecario ou nenhum.' });
+    }
+
+    db.prepare('UPDATE membros SET perfil = ? WHERE id = ?').run(perfil, req.params.id);
+    const label = perfil ? `promovido a "${perfil}"` : 'perfil removido';
+    res.json({ mensagem: `Membro ${label} com sucesso.` });
+  },
+
   historico(req, res) {
     const db = getDb();
     const membro = db.prepare('SELECT id, nome FROM membros WHERE id = ?').get(req.params.id);

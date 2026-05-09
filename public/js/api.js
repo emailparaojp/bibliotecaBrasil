@@ -2,17 +2,28 @@
 const API = (() => {
   const BASE = '/api';
 
+  function getAdminToken() {
+    return localStorage.getItem('adminToken') || '';
+  }
+
   async function request(method, path, body, params = {}) {
     const url = new URL(BASE + path, location.origin);
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v);
     });
     const opts = { method, headers: {} };
+    const token = getAdminToken();
+    if (token) opts.headers['Authorization'] = `Bearer ${token}`;
     if (body !== undefined) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }
     const res = await fetch(url, opts);
+    if (res.status === 401) {
+      localStorage.removeItem('adminToken');
+      if (typeof showAdminLogin === 'function') showAdminLogin();
+      throw new Error('Sessão expirada. Faça login novamente.');
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const msg = data.erro
@@ -75,6 +86,7 @@ const API = (() => {
     editarMembro:(id,b)=> API.put(`/membros/${id}`, b),
     renovarMat: (id) => API.patch(`/membros/${id}/renovar-matricula`),
     statusMembro:(id,b)=> API.patch(`/membros/${id}/status`, b),
+    perfilMembro:(id,p)=> API.patch(`/membros/${id}/perfil`, { perfil: p }),
     historicoMembro:(id,p)=> API.get(`/membros/${id}/historico`, p),
 
     emprestimos: (p)  => API.get('/emprestimos', p),
@@ -94,5 +106,18 @@ const API = (() => {
     pagarMulta:  (id) => API.patch(`/multas/${id}/pagar`),
     multasMembro:(id) => API.get(`/multas/membro/${id}`),
     pagarTodas:  (id) => API.patch(`/multas/membro/${id}/pagar-tudo`),
+
+    // Admin auth
+    adminLogin: (cpf, senha) => {
+      return fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf, senha }),
+      }).then(async r => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.erro || 'Erro ao autenticar');
+        return d;
+      });
+    },
   };
 })();

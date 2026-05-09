@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Biblioteca Brasil</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div class="app-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <i class="fa-solid fa-book-open"></i>
+      <span>BibliotecaBrasil</span>
+    </div>
+    <nav class="sidebar-nav" id="sidebarNav">
+      <a href="#dashboard" class="nav-item" data-page="dashboard">
+        <i class="fa-solid fa-house"></i><span>Dashboard</span>
+      </a>
+
+      <div class="nav-section">Acervo</div>
+      <a href="#livros" class="nav-item" data-page="livros">
+        <i class="fa-solid fa-book"></i><span>Livros</span>
+      </a>
+      <a href="#autores" class="nav-item" data-page="autores">
+        <i class="fa-solid fa-pen-nib"></i><span>Autores</span>
+      </a>
+      <a href="#editoras" class="nav-item" data-page="editoras">
+        <i class="fa-solid fa-building"></i><span>Editoras</span>
+      </a>
+      <a href="#categorias" class="nav-item" data-page="categorias">
+        <i class="fa-solid fa-tags"></i><span>Categorias</span>
+      </a>
+
+      <div class="nav-section">Circulação</div>
+      <a href="#membros" class="nav-item" data-page="membros">
+        <i class="fa-solid fa-users"></i><span>Membros</span>
+      </a>
+      <a href="#emprestimos" class="nav-item" data-page="emprestimos">
+        <i class="fa-solid fa-right-left"></i><span>Empréstimos</span>
+      </a>
+      <a href="#reservas" class="nav-item" data-page="reservas">
+        <i class="fa-solid fa-bookmark"></i><span>Reservas</span>
+      </a>
+      <a href="#multas" class="nav-item" data-page="multas">
+        <i class="fa-solid fa-file-invoice-dollar"></i><span>Multas</span>
+      </a>
+
+      <div class="nav-section">Gestão</div>
+      <a href="#relatorios" class="nav-item" data-page="relatorios">
+        <i class="fa-solid fa-chart-bar"></i><span>Relatórios</span>
+      </a>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <div class="main-wrapper" id="mainWrapper">
+    <header class="topbar">
+      <button class="btn-icon" id="btnMenu" title="Menu">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <h1 class="topbar-title" id="topbarTitle">Dashboard</h1>
+      <div id="topbarActions" class="topbar-actions">
+        <span id="adminUserName" style="font-size:.875rem;color:#64748b;"></span>
+        <button class="btn btn-sm btn-ghost" id="btnAdminLogout" title="Sair">
+          <i class="fa-solid fa-right-from-bracket"></i> Sair
+        </button>
+      </div>
+    </header>
+    <main class="main-content" id="mainContent">
+      <div class="empty-state">
+        <i class="fa-solid fa-spinner fa-spin fa-2x"></i>
+        <p>Carregando…</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modal" role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <h2 class="modal-title" id="modalTitle"></h2>
+      <button class="btn-icon modal-close" id="modalClose" title="Fechar">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Admin Login Overlay -->
+<div id="adminLoginOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.85);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;border-radius:12px;padding:2.5rem 3rem;min-width:340px;box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+    <div style="text-align:center;margin-bottom:1.5rem;">
+      <i class="fa-solid fa-book-open" style="font-size:2rem;color:#6366f1;"></i>
+      <h2 style="color:#f1f5f9;margin-top:.5rem;font-size:1.25rem;">BibliotecaBrasil</h2>
+      <p style="color:#94a3b8;font-size:.875rem;margin-top:.25rem;">Acesso Administrativo</p>
+    </div>
+    <form id="adminLoginForm">
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;color:#cbd5e1;font-size:.875rem;margin-bottom:.4rem;">CPF</label>
+        <input id="adminCpfInput" type="text" placeholder="000.000.000-00" maxlength="14"
+          style="width:100%;padding:.75rem 1rem;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#f1f5f9;font-size:1rem;box-sizing:border-box;outline:none;" required />
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;color:#cbd5e1;font-size:.875rem;margin-bottom:.4rem;">Senha</label>
+        <input id="adminSenhaInput" type="password" placeholder="Sua senha"
+          style="width:100%;padding:.75rem 1rem;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#f1f5f9;font-size:1rem;box-sizing:border-box;outline:none;" required />
+      </div>
+      <p id="adminLoginError" style="color:#f87171;font-size:.875rem;min-height:1.25rem;margin-bottom:.5rem;"></p>
+      <button type="submit"
+        style="width:100%;padding:.75rem;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:1rem;cursor:pointer;font-weight:600;">
+        Entrar
+      </button>
+    </form>
+    <p style="text-align:center;margin-top:1.25rem;">
+      <a href="/" style="color:#6366f1;font-size:.875rem;text-decoration:none;">← Voltar ao portal público</a>
+    </p>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/pages/dashboard.js"></script>
+<script src="js/pages/livros.js"></script>
+<script src="js/pages/membros.js"></script>
+<script src="js/pages/emprestimos.js"></script>
+<script src="js/pages/reservas.js"></script>
+<script src="js/pages/multas.js"></script>
+<script src="js/pages/relatorios.js"></script>
+<script src="js/pages/catalogo.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

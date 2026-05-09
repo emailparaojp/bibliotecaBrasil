@@ -8,6 +8,7 @@
  */
 
 require('dotenv').config();
+const bcrypt            = require('bcryptjs');
 const { runMigrations } = require('./migrations');
 const { getDb }         = require('./index');
 
@@ -282,6 +283,13 @@ function runSeedRich() {
     insMembro.run('Vanessa Correia',     '202.020.202-19','vanessa.c@email.com',        '(62) 9 2020-2020','Rua 68, 100 — Goiânia/GO',               'Estudante', daysFromNow(270), null);
     insMembro.run('Wellington Pinto',    '212.121.212-20','wellington.p@email.com',     '(98) 9 2121-2121','Av. dos Holandeses, 50 — São Luís/MA',    'Comum',     daysFromNow(90),  null);
 
+    // Usuário administrador padrão (ID 21)
+    const adminHash = bcrypt.hashSync('administrador123', 10);
+    db.prepare(`
+      INSERT INTO membros (nome, cpf, email, telefone, endereco, tipo, data_validade, senha_hash, perfil)
+      VALUES (?, ?, ?, ?, ?, ?, date('now', '+10 years'), ?, ?)
+    `).run('Administrador', '101.010.101-01', 'admin@bibliotecabrasil.local', '', '', 'Professor', adminHash, 'admin');
+
     /* ─────────────────────────── EMPRÉSTIMOS ─────────────────────── */
     const insEmp = db.prepare(`
       INSERT INTO emprestimos
@@ -379,7 +387,8 @@ function runSeedRich() {
   seed();
   console.log('🌱 Seed rico executado com sucesso!');
   console.log('   📚 30 livros | 68 exemplares | 17 autores | 8 editoras | 12 categorias');
-  console.log('   👥 20 membros | 16 empréstimos | 6 reservas | 7 multas');
+  console.log('   👥 21 membros (+ admin) | 16 empréstimos | 6 reservas | 7 multas');
+  console.log('   🔑 Admin portal — CPF: 101.010.101-01 | Senha: administrador123');
 }
 
 module.exports = { runSeedRich };

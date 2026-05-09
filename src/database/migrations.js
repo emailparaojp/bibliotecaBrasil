@@ -1,5 +1,6 @@
 'use strict';
 
+const bcrypt = require('bcryptjs');
 const { getDb } = require('./index');
 
 function runMigrations() {
@@ -72,6 +73,7 @@ function runMigrations() {
       data_validade   DATE NOT NULL,
       ativo           INTEGER NOT NULL DEFAULT 1,
       observacoes     TEXT,
+      senha_hash      TEXT,
       created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -125,7 +127,65 @@ function runMigrations() {
     CREATE INDEX IF NOT EXISTS idx_multas_pago        ON multas(pago);
   `);
 
+  // Migração incremental: adiciona colunas que podem não existir em bancos antigos
+  const cols = db.prepare("PRAGMA table_info(membros)").all().map(c => c.name);
+  if (!cols.includes('senha_hash')) {
+    db.exec('ALTER TABLE membros ADD COLUMN senha_hash TEXT');
+  }
+  if (!cols.includes('perfil')) {
+    db.exec("ALTER TABLE membros ADD COLUMN perfil TEXT DEFAULT NULL");
+  }
+
+  const livrosCols = db.prepare("PRAGMA table_info(livros)").all().map(c => c.name);
+  if (!livrosCols.includes('capa_mime')) {
+    db.exec('ALTER TABLE livros ADD COLUMN capa_mime TEXT DEFAULT \'image/jpeg\'');
+  }
+  if (!livrosCols.includes('capa_base64')) {
+    db.exec('ALTER TABLE livros ADD COLUMN capa_base64 TEXT');
+  }
+
+  ensureAdminUser(db);
+
   console.log('✅ Migrations executadas com sucesso.');
 }
 
-module.exports = { runMigrations };
+/**
+ * Garante que o usuário administrador padrão sempre exista no banco.
+ * CPF: 101.010.101-01 | Senha: administrador123
+ * Idempotente — pode rodar múltiplas vezes.
+ */
+function ensureAdminUser(db) {
+  const CPF_FMT = '101.010.101-01';
+  const EMAIL   = 'admin@bibliotecabrasil.local';
+
+  // Remove entrada legada com CPF sem formatação (se existir)
+  db.prepare("DELETE FROM membros WHERE cpf = '10101010101' AND email = ?").run(EMAIL);
+
+  const existing = db.prepare('SELECT id, senha_hash, perfil FROM membros WHERE cpf = ?').get(CPF_FMT);
+  if (!existing) {
+    const hash = bcrypt.hashSync('administrador123', 10);
+    db.prepare(`
+      INSERT INTO membros (nome, cpf, email, telefone, endereco, tipo, data_validade, senha_hash, perfil)
+      VALUES (?, ?, ?, ?, ?, ?, date('now', '+10 years'), ?, ?)
+    `).run('Administrador', CPF_FMT, EMAIL, '', '', 'Professor', hash, 'admin');
+    console.log('👤 Usuário administrador padrão criado (CPF: 101.010.101-01).');
+  } else {
+    const updates = [];
+    const params = [];
+    if (!existing.senha_hash) {
+      updates.push('senha_hash = ?');
+      params.push(bcrypt.hashSync('administrador123', 10));
+    }
+    if (!existing.perfil) {
+      updates.push('perfil = ?');
+      params.push('admin');
+    }
+    if (updates.length) {
+      params.push(CPF_FMT);
+      db.prepare(`UPDATE membros SET ${updates.join(', ')} WHERE cpf = ?`).run(...params);
+      console.log('👤 Usuário administrador padrão atualizado.');
+    }
+  }
+}
+
+module.exports = { runMigrations, ensureAdminUser };

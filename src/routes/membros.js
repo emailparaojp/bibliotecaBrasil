@@ -24,6 +24,11 @@ router.put('/:id',
 
 router.patch('/:id/renovar-matricula', param('id').isInt(), validate, ctrl.renovarMatricula);
 
+router.patch('/:id/perfil',
+  param('id').isInt(),
+  body('perfil').optional({ nullable: true }).isIn(['admin', 'bibliotecario', 'nenhum', '']).withMessage('Perfil inválido.'),
+  validate, ctrl.alterarPerfil);
+
 router.patch('/:id/status',
   param('id').isInt(),
   body('ativo').isBoolean().withMessage('Campo "ativo" deve ser booleano.'),

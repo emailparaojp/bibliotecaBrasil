@@ -52,9 +52,14 @@ const LivrosPage = (() => {
                                        categoria: state.categoria || undefined, disponivel: state.disponivel || undefined });
       const { livros, total, pagina, limite } = data;
       const html = UI.table(
-        ['Título / Autor', 'ISBN', 'Categoria', 'Exemplares', 'Disponíveis', 'Ações'],
+        ['Capa', 'Título / Autor', 'ISBN', 'Categoria', 'Exemplares', 'Disponíveis', 'Ações'],
         livros,
         r => `
+          <td style="width:52px;">
+            ${r.capa_url
+              ? `<img src="/api/livros/${r.id}/capa" style="width:40px;height:54px;object-fit:cover;border-radius:4px;" loading="lazy">`
+              : `<div style="width:40px;height:54px;background:#e0e7ff;border-radius:4px;display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-book" style="color:#a5b4fc;font-size:.9rem;"></i></div>`}
+          </td>
           <td>
             <div style="font-weight:600">${esc(r.titulo)}</div>
             <div class="text-muted text-sm">${esc(r.autor_nome || '—')}</div>
@@ -163,8 +168,25 @@ const LivrosPage = (() => {
               <input class="input" name="localizacao" placeholder="Ex: A-01" value="${esc(livro.localizacao||'')}">
             </div>
             <div class="form-group">
-              <label>URL da capa</label>
-              <input class="input" name="capa_url" type="url" value="${esc(livro.capa_url||'')}">
+              <label>Capa do Livro</label>
+              <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+                <div id="capaPreview" style="width:80px;height:110px;border-radius:6px;overflow:hidden;background:#e0e7ff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                  ${livro.id
+                    ? `<img id="capaImg" src="/api/livros/${livro.id}/capa" onerror="this.style.display='none';document.getElementById('capaIcon').style.display=''" style="width:100%;height:100%;object-fit:cover;">`
+                    : ''}
+                  <i id="capaIcon" class="fa-solid fa-image" style="font-size:1.5rem;color:#a5b4fc;${livro.id?'display:none;':''}"></i>
+                </div>
+                <div>
+                  <input type="file" id="capaFile" accept="image/*" style="display:none;">
+                  <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('capaFile').click()">
+                    <i class="fa-solid fa-upload"></i> Escolher imagem
+                  </button>
+                  <div class="text-muted text-sm" style="margin-top:.25rem;">JPG, PNG ou WebP · max 2MB</div>
+                  <div id="capaNome" class="text-sm" style="margin-top:.25rem;color:var(--color-primary);"></div>
+                </div>
+              </div>
+              <input type="hidden" name="capa_base64" id="capaBase64">
+              <input type="hidden" name="capa_mime" id="capaMime">
             </div>
             <div class="form-group form-col-full">
               <label>Descrição</label>
@@ -178,6 +200,30 @@ const LivrosPage = (() => {
          <button class="btn btn-primary" onclick="LivrosPage.salvar(${id||'null'})">
            <i class="fa-solid fa-floppy-disk"></i> Salvar
          </button>`, true);
+
+      // Bind file input after modal is open
+      document.getElementById('capaFile')?.addEventListener('change', function() {
+        const file = this.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) { UI.toast('Imagem muito grande (máx 2MB).', 'error'); return; }
+        const reader = new FileReader();
+        reader.onload = e => {
+          const dataUrl = e.target.result; // data:image/jpeg;base64,...
+          const [meta, b64] = dataUrl.split(',');
+          const mime = meta.replace('data:', '').replace(';base64', '');
+          document.getElementById('capaBase64').value = b64;
+          document.getElementById('capaMime').value = mime;
+          document.getElementById('capaNome').textContent = file.name;
+          const img = document.getElementById('capaImg') || Object.assign(document.createElement('img'), { id: 'capaImg', style: 'width:100%;height:100%;object-fit:cover;' });
+          const icon = document.getElementById('capaIcon');
+          img.src = dataUrl;
+          img.style.display = '';
+          if (icon) icon.style.display = 'none';
+          if (!document.getElementById('capaImg')) document.getElementById('capaPreview').prepend(img);
+        };
+        reader.readAsDataURL(file);
+      });
+
     } catch (e) {
       UI.openModal(title, `<div class="alert alert-danger">${e.message}</div>`);
     }

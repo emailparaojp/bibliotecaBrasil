@@ -7,6 +7,7 @@ const ctrl = require('../controllers/livrosController');
 
 // Livros
 router.get('/',    ctrl.listar);
+router.get('/:id/capa', param('id').isInt(), validate, ctrl.servirCapa);
 router.get('/:id', param('id').isInt(), validate, ctrl.buscarPorId);
 
 router.post('/',

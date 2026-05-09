@@ -1,5 +1,10 @@
-/* pages/membros.js */
-const MembrosPage = (() => {
+function perfilBadge(perfil) {
+  if (perfil === 'admin')        return '<span class="badge" style="background:#6366f1;color:#fff">Admin</span>';
+  if (perfil === 'bibliotecario') return '<span class="badge" style="background:#0891b2;color:#fff">Bibliotecário</span>';
+  return '<span class="text-muted" style="font-size:.8rem">—</span>';
+}
+
+
   let state = { busca: '', tipo: '', ativo: '', page: 1, limit: 15 };
 
   async function render() {
@@ -40,7 +45,7 @@ const MembrosPage = (() => {
       const data = await API.membros({ ...state, busca: state.busca||undefined, tipo: state.tipo||undefined, ativo: state.ativo||undefined });
       const { membros, total, pagina, limite } = data;
       const html = UI.table(
-        ['Nome / CPF', 'Tipo', 'Validade', 'Emp. Ativos', 'Multas', 'Status', 'Ações'],
+        ['Nome / CPF', 'Tipo', 'Perfil', 'Validade', 'Emp. Ativos', 'Multas', 'Status', 'Ações'],
         membros,
         m => `
           <td>
@@ -48,6 +53,7 @@ const MembrosPage = (() => {
             <div class="text-muted text-sm">${m.cpf}</div>
           </td>
           <td>${UI.tipoBadge(m.tipo)}</td>
+          <td>${perfilBadge(m.perfil)}</td>
           <td class="${new Date(m.data_validade)<new Date()?'' : ''}">
             <span class="${new Date(m.data_validade)<new Date()?'badge badge-red':'text-sm'}">
               ${UI.fmtDate(m.data_validade)}
@@ -168,6 +174,7 @@ const MembrosPage = (() => {
           <div class="detail-item"><label>Nome</label><span>${esc(m.nome)}</span></div>
           <div class="detail-item"><label>CPF</label><span>${m.cpf}</span></div>
           <div class="detail-item"><label>Tipo</label><span>${UI.tipoBadge(m.tipo)}</span></div>
+          <div class="detail-item"><label>Perfil</label><span>${perfilBadge(m.perfil)}</span></div>
           <div class="detail-item"><label>Status</label><span>${UI.ativoBadge(m.ativo)}</span></div>
           <div class="detail-item"><label>E-mail</label><span>${m.email||'—'}</span></div>
           <div class="detail-item"><label>Telefone</label><span>${m.telefone||'—'}</span></div>
@@ -209,12 +216,52 @@ const MembrosPage = (() => {
          <button class="btn btn-secondary" onclick="MembrosPage.verHistorico(${id},'${esc(m.nome)}')">
            <i class="fa-solid fa-clock-rotate-left"></i> Histórico
          </button>
+         <button class="btn btn-warning" onclick="MembrosPage.gerenciarPerfil(${id},'${esc(m.nome)}','${m.perfil||''}')">
+           <i class="fa-solid fa-shield-halved"></i> Perfil
+         </button>
          <button class="btn btn-primary" onclick="MembrosPage.openForm(${id})">
            <i class="fa-solid fa-pencil"></i> Editar
          </button>`, true);
     } catch (e) {
       document.getElementById('modalBody').innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
     }
+  }
+
+  async function gerenciarPerfil(id, nome, perfilAtual) {
+    const perfilLabel = { '': 'Nenhum (usuário comum)', 'bibliotecario': 'Bibliotecário', 'admin': 'Administrador' };
+    const body = `
+      <p style="margin-bottom:1rem;">Defina o nível de acesso administrativo de <strong>${esc(nome)}</strong>:</p>
+      <div class="form-group">
+        <label>Perfil de acesso</label>
+        <select class="input" id="selectPerfil">
+          <option value=""   ${!perfilAtual                    ? 'selected' : ''}>Nenhum (usuário comum)</option>
+          <option value="bibliotecario" ${perfilAtual==='bibliotecario' ? 'selected' : ''}>Bibliotecário — acesso ao painel admin</option>
+          <option value="admin"         ${perfilAtual==='admin'         ? 'selected' : ''}>Administrador — acesso total</option>
+        </select>
+      </div>
+      <div class="alert alert-warning" style="margin-top:1rem;font-size:.875rem;">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        Perfis <strong>Bibliotecário</strong> e <strong>Administrador</strong> concedem acesso ao painel administrativo.
+      </div>`;
+
+    UI.openModal(`🛡️ Perfil — ${esc(nome)}`, body,
+      `<button class="btn btn-secondary" onclick="UI.closeModal()">Cancelar</button>
+       <button class="btn btn-primary" onclick="MembrosPage.salvarPerfil(${id},'${esc(nome)}')">
+         <i class="fa-solid fa-floppy-disk"></i> Salvar perfil
+       </button>`, true);
+  }
+
+  async function salvarPerfil(id, nome) {
+    const perfil = document.getElementById('selectPerfil').value;
+    const btn = document.querySelector('#modalFooter .btn-primary');
+    btn.disabled = true;
+    try {
+      const r = await API.perfilMembro(id, perfil || 'nenhum');
+      UI.toast(r.mensagem, 'success');
+      UI.closeModal();
+      loadData();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { btn.disabled = false; }
   }
 
   async function renovarMat(id, nome) {
@@ -261,5 +308,5 @@ const MembrosPage = (() => {
     }
   }
 
-  return { render, openForm, salvar, openDetail, renovarMat, toggleAtivo, verHistorico, loadData, _goPage };
+  return { render, openForm, salvar, openDetail, renovarMat, toggleAtivo, verHistorico, gerenciarPerfil, salvarPerfil, loadData, _goPage };
 })();
