@@ -25,6 +25,14 @@ Criado para ajudar pequenas bibliotecas — escolares, comunitárias, paroquiais
 - **Relatórios** — dashboard com cards de resumo, acervo por categoria/condição, ranking de livros, mapa financeiro e devoluções previstas
 - **Controle de acesso** — área restrita a usuários com perfil `admin` ou `bibliotecario`; autenticação via CPF + senha com JWT
 
+## 🌍 Demonstração online
+
+Você pode ver uma versão prévia da aplicação em funcionamento no endereço:
+
+**👉 [https://bibliotecabrasil.onrender.com/](https://bibliotecabrasil.onrender.com/)**
+
+---
+
 ## 🚀 Como rodar
 
 ```bash

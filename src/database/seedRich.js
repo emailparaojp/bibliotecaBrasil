@@ -94,56 +94,58 @@ function runSeedRich() {
     /* ──────────────────────────── LIVROS ─────────────────────────── */
     const insLivro = db.prepare(`
       INSERT INTO livros
-        (isbn, titulo, subtitulo, id_autor, id_editora, id_categoria, ano_publicacao, edicao, num_paginas, idioma, localizacao, descricao)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        (isbn, titulo, subtitulo, id_autor, id_editora, id_categoria, ano_publicacao, edicao, num_paginas, idioma, localizacao, descricao, capa_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+
+    const capaUrl = isbn => `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
 
     // Machado de Assis — Prateleira A
-    insLivro.run('9788535902778','Dom Casmurro',                    null, 1,1,1,1899,'1ª',256,'Português','A-01','Narrado por Bentinho, que suspeita de traição de Capitu. Clássico do Realismo brasileiro.');
-    insLivro.run('9788535914849','Memórias Póstumas de Brás Cubas',null, 1,1,1,1881,'1ª',288,'Português','A-01','Primeiro romance póstumo-realista: narrado por um defunto autor.');
-    insLivro.run('9788535905618','Quincas Borba',                   null, 1,1,1,1891,'1ª',264,'Português','A-01','Terceiro da trilogia realista: a loucura, a fortuna e o Humanitismo.');
+    insLivro.run('9788535902778','Dom Casmurro',                    null, 1,1,1,1899,'1ª',256,'Português','A-01','Narrado por Bentinho, que suspeita de traição de Capitu. Clássico do Realismo brasileiro.',capaUrl('9788535902778'));
+    insLivro.run('9788535914849','Memórias Póstumas de Brás Cubas',null, 1,1,1,1881,'1ª',288,'Português','A-01','Primeiro romance póstumo-realista: narrado por um defunto autor.',capaUrl('9788535914849'));
+    insLivro.run('9788535905618','Quincas Borba',                   null, 1,1,1,1891,'1ª',264,'Português','A-01','Terceiro da trilogia realista: a loucura, a fortuna e o Humanitismo.',capaUrl('9788535905618'));
 
     // Clarice Lispector — Prateleira B
-    insLivro.run('9788532511010','A Hora da Estrela',               null, 2,3,2,1977,'1ª',88 ,'Português','B-01','Última obra publicada em vida: a nordestina Macabéa e a escrita como urgência.');
-    insLivro.run('9788532523440','A Paixão Segundo G.H.',           null, 2,3,2,1964,'1ª',152,'Português','B-01','Mergulho na consciência de uma mulher após um ato perturbador envolvendo uma barata.');
-    insLivro.run('9788532523457','Perto do Coração Selvagem',       null, 2,3,2,1943,'1ª',192,'Português','B-01','Primeiro romance de Clarice, de exploração interior radical.');
+    insLivro.run('9788532511010','A Hora da Estrela',               null, 2,3,2,1977,'1ª',88 ,'Português','B-01','Última obra publicada em vida: a nordestina Macabéa e a escrita como urgência.',capaUrl('9788532511010'));
+    insLivro.run('9788532523440','A Paixão Segundo G.H.',           null, 2,3,2,1964,'1ª',152,'Português','B-01','Mergulho na consciência de uma mulher após um ato perturbador envolvendo uma barata.',capaUrl('9788532523440'));
+    insLivro.run('9788532523457','Perto do Coração Selvagem',       null, 2,3,2,1943,'1ª',192,'Português','B-01','Primeiro romance de Clarice, de exploração interior radical.',capaUrl('9788532523457'));
 
     // Jorge Amado — Prateleira C
-    insLivro.run('9788501088628','Gabriela, Cravo e Canela',        null, 3,2,1,1958,'1ª',390,'Português','C-01','Marco da literatura nordestina: a chegada de Gabriela ao Ilhéus dos anos 1920.');
-    insLivro.run('9788501083388','Capitães da Areia',               null, 3,2,2,1937,'1ª',320,'Português','C-01','Meninos de rua em Salvador nos anos 1930, sob o olhar humanista de Amado.');
-    insLivro.run('9788501091697','Tereza Batista Cansada de Guerra',null, 3,2,1,1972,'1ª',360,'Português','C-01','A história de uma mulher que luta contra o destino e a opressão no sertão baiano.');
+    insLivro.run('9788501088628','Gabriela, Cravo e Canela',        null, 3,2,1,1958,'1ª',390,'Português','C-01','Marco da literatura nordestina: a chegada de Gabriela ao Ilhéus dos anos 1920.',capaUrl('9788501088628'));
+    insLivro.run('9788501083388','Capitães da Areia',               null, 3,2,2,1937,'1ª',320,'Português','C-01','Meninos de rua em Salvador nos anos 1930, sob o olhar humanista de Amado.',capaUrl('9788501083388'));
+    insLivro.run('9788501091697','Tereza Batista Cansada de Guerra',null, 3,2,1,1972,'1ª',360,'Português','C-01','A história de uma mulher que luta contra o destino e a opressão no sertão baiano.',capaUrl('9788501091697'));
 
     // Graciliano Ramos — Prateleira D
-    insLivro.run('9788578273132','Vidas Secas',                     null, 4,1,2,1938,'1ª',176,'Português','D-01','O sofrimento de Fabiano e sua família de retirantes no árido sertão nordestino.');
-    insLivro.run('9788578274016','São Bernardo',                    null, 4,1,2,1934,'1ª',196,'Português','D-01','Paulo Honório constrói uma fazenda e uma vida à custa de tudo e todos.');
+    insLivro.run('9788578273132','Vidas Secas',                     null, 4,1,2,1938,'1ª',176,'Português','D-01','O sofrimento de Fabiano e sua família de retirantes no árido sertão nordestino.',capaUrl('9788578273132'));
+    insLivro.run('9788578274016','São Bernardo',                    null, 4,1,2,1934,'1ª',196,'Português','D-01','Paulo Honório constrói uma fazenda e uma vida à custa de tudo e todos.',capaUrl('9788578274016'));
 
     // José Saramago — Prateleira E
-    insLivro.run('9789722039598','Ensaio sobre a Cegueira',         null, 5,1,1,1995,'1ª',310,'Português','E-01','Uma epidemia de cegueira branca assola uma cidade — metáfora da perda da humanidade.');
-    insLivro.run('9789722041782','O Evangelho Segundo Jesus Cristo',null, 5,1,1,1991,'1ª',444,'Português','E-01','Releitura ficcional da vida de Jesus Cristo, que gerou polêmica ao misturar o humano e o divino.');
+    insLivro.run('9789722039598','Ensaio sobre a Cegueira',         null, 5,1,1,1995,'1ª',310,'Português','E-01','Uma epidemia de cegueira branca assola uma cidade — metáfora da perda da humanidade.',capaUrl('9789722039598'));
+    insLivro.run('9789722041782','O Evangelho Segundo Jesus Cristo',null, 5,1,1,1991,'1ª',444,'Português','E-01','Releitura ficcional da vida de Jesus Cristo, que gerou polêmica ao misturar o humano e o divino.',capaUrl('9789722041782'));
 
     // García Márquez — Prateleira F
-    insLivro.run('9788501039385','Cem Anos de Solidão',             null, 6,2,6,1967,'1ª',448,'Português','F-01','A saga épica da família Buendía e da cidade de Macondo ao longo de sete gerações.');
-    insLivro.run('9788501058225','Amor nos Tempos do Cólera',       null, 6,2,1,1985,'1ª',400,'Português','F-01','A história de um amor não correspondido que dura mais de cinquenta anos.');
+    insLivro.run('9788501039385','Cem Anos de Solidão',             null, 6,2,6,1967,'1ª',448,'Português','F-01','A saga épica da família Buendía e da cidade de Macondo ao longo de sete gerações.',capaUrl('9788501039385'));
+    insLivro.run('9788501058225','Amor nos Tempos do Cólera',       null, 6,2,1,1985,'1ª',400,'Português','F-01','A história de um amor não correspondido que dura mais de cinquenta anos.',capaUrl('9788501058225'));
 
     // J.K. Rowling — Prateleira G
-    insLivro.run('9788532521934','Harry Potter e a Pedra Filosofal',          null, 7,3,4,1997,'1ª',232,'Português','G-01','O início da jornada do jovem bruxo Harry Potter na Escola de Magia e Bruxaria de Hogwarts.');
-    insLivro.run('9788532523662','Harry Potter e a Câmara Secreta',           null, 7,3,4,1998,'1ª',272,'Português','G-01','Harry retorna a Hogwarts e descobre uma câmara misteriosa que ameaça os alunos.');
-    insLivro.run('9788532527301','Harry Potter e o Prisioneiro de Azkaban',   null, 7,3,4,1999,'1ª',336,'Português','G-01','Um fugitivo perigoso escapa da prisão mágica de Azkaban e parece estar atrás de Harry.');
+    insLivro.run('9788532521934','Harry Potter e a Pedra Filosofal',          null, 7,3,4,1997,'1ª',232,'Português','G-01','O início da jornada do jovem bruxo Harry Potter na Escola de Magia e Bruxaria de Hogwarts.',capaUrl('9788532521934'));
+    insLivro.run('9788532523662','Harry Potter e a Câmara Secreta',           null, 7,3,4,1998,'1ª',272,'Português','G-01','Harry retorna a Hogwarts e descobre uma câmara misteriosa que ameaça os alunos.',capaUrl('9788532523662'));
+    insLivro.run('9788532527301','Harry Potter e o Prisioneiro de Azkaban',   null, 7,3,4,1999,'1ª',336,'Português','G-01','Um fugitivo perigoso escapa da prisão mágica de Azkaban e parece estar atrás de Harry.',capaUrl('9788532527301'));
 
     // George Orwell — Prateleira H
-    insLivro.run('9788535914177','1984',                            null, 8,1,5,1949,'1ª',416,'Português','H-01','Distopia clássica sobre vigilância total, manipulação da verdade e totalitarismo.');
-    insLivro.run('9788535906424','A Revolução dos Bichos',          null, 8,1,5,1945,'1ª',152,'Português','H-01','Alegoria política sobre como revoluções podem ser corrompidas pelo poder.');
+    insLivro.run('9788535914177','1984',                            null, 8,1,5,1949,'1ª',416,'Português','H-01','Distopia clássica sobre vigilância total, manipulação da verdade e totalitarismo.',capaUrl('9788535914177'));
+    insLivro.run('9788535906424','A Revolução dos Bichos',          null, 8,1,5,1945,'1ª',152,'Português','H-01','Alegoria política sobre como revoluções podem ser corrompidas pelo poder.',capaUrl('9788535906424'));
 
     // Outros autores — Prateleiras I..
-    insLivro.run('9788535903393','Grande Sertão: Veredas',          null, 9,1,2,1956,'1ª',608,'Português','I-01','Monólogo de Riobaldo sobre pacto com o diabo, amor e violência nos sertões de Minas.');
-    insLivro.run('9788526001312','O Tempo e o Vento — O Continente',null,10,4,2,1949,'1ª',752,'Português','I-02','Épica saga familiar que conta a história do Rio Grande do Sul através dos Terra Cambará.');
-    insLivro.run('9788576655237','O Alquimista',                    null,11,5,1,1988,'1ª',208,'Português','J-01','A jornada de Santiago, um pastor andaluz em busca de seu tesouro pessoal.');
-    insLivro.run('9788525406866','A Metamorfose',                   null,12,7,12,1915,'1ª',120,'Português','J-02','Gregor Samsa acorda transformado em inseto — símbolo da alienação do homem moderno.');
-    insLivro.run('9788535914184','Crime e Castigo',                 null,13,1,12,1866,'1ª',560,'Português','J-03','Raskólnikov planeja e comete um assassinato e é dilacerado pela culpa e os questionamentos morais.');
-    insLivro.run('9786558882893','O Pequeno Príncipe',              null,14,8,10,1943,'1ª',96 ,'Português','K-01','O encontro de um aviador com um principezinho vindo de outro planeta, cheio de sabedoria.');
-    insLivro.run('9788501079824','O Nome da Rosa',                  null,15,2,11,1980,'1ª',624,'Português','K-02','Um monge e seu aprendiz investigam uma série de mortes misteriosas em uma abadia medieval.');
-    insLivro.run('9788504018752','Morte no Nilo',                   null,16,6,11,1937,'1ª',288,'Português','K-03','Hercule Poirot investiga um assassinato a bordo de um navio no Nilo egípcio.');
-    insLivro.run('9788504018769','Assassinato no Expresso do Oriente',null,16,6,11,1934,'1ª',270,'Português','K-03','Um passageiro é encontrado morto no famoso trem Orient Express. Poirot é o detetive.');
-    insLivro.run('9788535916324','Alguma Poesia',                   null,17,1,7,1930,'1ª',96 ,'Português','L-01','Primeiro livro de poemas de Drummond, com o emblemático "No meio do caminho tinha uma pedra".');
+    insLivro.run('9788535903393','Grande Sertão: Veredas',          null, 9,1,2,1956,'1ª',608,'Português','I-01','Monólogo de Riobaldo sobre pacto com o diabo, amor e violência nos sertões de Minas.',capaUrl('9788535903393'));
+    insLivro.run('9788526001312','O Tempo e o Vento — O Continente',null,10,4,2,1949,'1ª',752,'Português','I-02','Épica saga familiar que conta a história do Rio Grande do Sul através dos Terra Cambará.',capaUrl('9788526001312'));
+    insLivro.run('9788576655237','O Alquimista',                    null,11,5,1,1988,'1ª',208,'Português','J-01','A jornada de Santiago, um pastor andaluz em busca de seu tesouro pessoal.',capaUrl('9788576655237'));
+    insLivro.run('9788525406866','A Metamorfose',                   null,12,7,12,1915,'1ª',120,'Português','J-02','Gregor Samsa acorda transformado em inseto — símbolo da alienação do homem moderno.',capaUrl('9788525406866'));
+    insLivro.run('9788535914184','Crime e Castigo',                 null,13,1,12,1866,'1ª',560,'Português','J-03','Raskólnikov planeja e comete um assassinato e é dilacerado pela culpa e os questionamentos morais.',capaUrl('9788535914184'));
+    insLivro.run('9786558882893','O Pequeno Príncipe',              null,14,8,10,1943,'1ª',96 ,'Português','K-01','O encontro de um aviador com um principezinho vindo de outro planeta, cheio de sabedoria.',capaUrl('9786558882893'));
+    insLivro.run('9788501079824','O Nome da Rosa',                  null,15,2,11,1980,'1ª',624,'Português','K-02','Um monge e seu aprendiz investigam uma série de mortes misteriosas em uma abadia medieval.',capaUrl('9788501079824'));
+    insLivro.run('9788504018752','Morte no Nilo',                   null,16,6,11,1937,'1ª',288,'Português','K-03','Hercule Poirot investiga um assassinato a bordo de um navio no Nilo egípcio.',capaUrl('9788504018752'));
+    insLivro.run('9788504018769','Assassinato no Expresso do Oriente',null,16,6,11,1934,'1ª',270,'Português','K-03','Um passageiro é encontrado morto no famoso trem Orient Express. Poirot é o detetive.',capaUrl('9788504018769'));
+    insLivro.run('9788535916324','Alguma Poesia',                   null,17,1,7,1930,'1ª',96 ,'Português','L-01','Primeiro livro de poemas de Drummond, com o emblemático "No meio do caminho tinha uma pedra".',capaUrl('9788535916324'));
 
     /* ─────────────────────────── EXEMPLARES ──────────────────────── */
     // Todos entram como disponivel=1; atualizaremos os emprestados depois.
