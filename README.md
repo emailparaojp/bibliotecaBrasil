@@ -2,7 +2,7 @@
 
 > **Projeto open source · Uso livre e gratuito**
 
-Sistema completo de gerenciamento de biblioteca física com **portal público**, **painel administrativo** e **API REST**, construído com **Node.js + Express + SQLite**.
+Sistema completo de gerenciamento de biblioteca física com **portal público**, **painel administrativo** e **API REST**, construído com **Node.js + Express**. Funciona com **SQLite** (sem configuração) ou **PostgreSQL** (para ambientes de produção).
 
 Criado para ajudar pequenas bibliotecas — escolares, comunitárias, paroquiais e municipais — a organizarem seus acervos de forma moderna, sem custo algum. Qualquer biblioteca pode usar, copiar, modificar e distribuir este software livremente. Se precisar de ajuda para instalar ou adaptar o sistema, podemos ajudar.
 
@@ -35,17 +35,51 @@ Você pode ver uma versão prévia da aplicação em funcionamento no endereço:
 
 ## 🚀 Como rodar
 
+### 🐳 Docker (recomendado — o mais simples)
+
+Sem precisar instalar Node.js, MariaDB ou qualquer dependência:
+
 ```bash
-npm install
-npm start        # produção
-npm run dev      # desenvolvimento (hot-reload)
+# 1. Clonar o repositório
+git clone https://github.com/emailparaojp/bibliotecaBrasil.git
+cd bibliotecaBrasil
+
+# 2. Subir tudo com um comando
+docker compose up -d
 ```
+
+Pronto! A aplicação estará disponível em:
 
 | Interface | URL |
 |---|---|
 | Portal público | http://localhost:3000 |
 | Painel administrativo | http://localhost:3000/admin |
 | API REST | http://localhost:3000/api/ |
+
+O Docker Compose sobe automaticamente:
+- **MariaDB 11** com volume persistente (os dados não se perdem ao reiniciar)
+- **A aplicação** conectada ao banco, com tabelas criadas automaticamente
+
+```bash
+# Ver logs em tempo real
+docker compose logs -f app
+
+# Parar tudo
+docker compose down
+
+# Apagar tudo (inclusive os dados do banco)
+docker compose down -v
+```
+
+---
+
+### 💻 Rodar localmente (sem Docker)
+
+```bash
+npm install
+npm start        # produção (SQLite, sem configuração)
+npm run dev      # desenvolvimento (hot-reload)
+```
 
 ### Usuário administrador padrão
 
@@ -55,6 +89,46 @@ npm run dev      # desenvolvimento (hot-reload)
 | Senha | `administrador123` |
 
 > Este usuário é criado automaticamente na primeira inicialização. Troque a senha após o primeiro acesso.
+
+---
+
+### 🗄️ Banco de dados
+
+O sistema suporta dois bancos de dados:
+
+#### SQLite (padrão — sem configuração)
+
+Ideal para testes, uso local e bibliotecas pequenas. O arquivo é criado automaticamente:
+
+```bash
+npm install
+npm start  # cria biblioteca.db automaticamente
+```
+
+#### MariaDB/MySQL (recomendado para produção)
+
+Para usar MariaDB ou MySQL, basta definir a variável `DATABASE_URL` no `.env`:
+
+```env
+DATABASE_URL=mysql://biblioteca:senha@localhost:3306/biblioteca
+```
+
+Passos para configurar:
+
+```bash
+# 1. Criar o banco de dados no MariaDB/MySQL
+mysql -u root -p -e "CREATE DATABASE biblioteca; CREATE USER 'biblioteca'@'localhost' IDENTIFIED BY 'senha'; GRANT ALL ON biblioteca.* TO 'biblioteca'@'localhost';"
+
+# 2. Definir DATABASE_URL no .env
+echo "DATABASE_URL=mysql://biblioteca:senha@localhost:3306/biblioteca" >> .env
+
+# 3. Iniciar — as tabelas são criadas automaticamente
+npm start
+```
+
+> O sistema detecta automaticamente qual banco usar. Se `DATABASE_URL` estiver definida, usa MariaDB/MySQL; caso contrário, usa SQLite. Nenhuma outra alteração é necessária.
+
+---
 
 ### Popular o banco de dados
 
@@ -75,7 +149,8 @@ npm run seed:rich
 | Variável | Padrão | Descrição |
 |---|---|---|
 | `PORT` | `3000` | Porta do servidor |
-| `DB_PATH` | `./biblioteca.db` | Caminho do banco SQLite |
+| `DATABASE_URL` | *(não definida)* | Connection string MariaDB/MySQL — se definida, usa MySQL; senão, usa SQLite |
+| `DB_PATH` | `./biblioteca.db` | Caminho do arquivo SQLite (ignorado se `DATABASE_URL` definida) |
 | `JWT_SECRET` | *(gerado)* | Chave para assinatura dos tokens JWT |
 | `MULTA_DIARIA` | `0.50` | Valor da multa por dia de atraso (R$) |
 | `DIAS_EMPRESTIMO_ESTUDANTE` | `7` | Prazo de empréstimo para estudantes |
@@ -442,7 +517,9 @@ autores ──< livros >── editoras
 
 - **Node.js** v18+
 - **Express 5** — framework HTTP
-- **better-sqlite3** — banco de dados SQLite síncrono e performático
+- **Knex.js** — query builder compatível com SQLite e MariaDB/MySQL
+- **better-sqlite3** — banco de dados SQLite síncrono (padrão, sem configuração)
+- **mysql2** — driver MariaDB/MySQL (ativado automaticamente via `DATABASE_URL`)
 - **bcryptjs** — hash de senhas
 - **jsonwebtoken** — autenticação JWT (portal e painel admin)
 - **express-validator** — validação e sanitização de entrada
@@ -486,14 +563,6 @@ Se este projeto foi útil para sua biblioteca e você quiser contribuir financei
 Qualquer valor é bem-vindo e ajuda a manter o projeto ativo! 🙏
 
 [![GitHub](https://img.shields.io/badge/GitHub-bibliotecaBrasil-181717?logo=github)](https://github.com/emailparaojp/bibliotecaBrasil)
-
-### Apoie o projeto
-
-Se o BibliotecaBrasil foi útil para você ou sua biblioteca, considere fazer uma contribuição simbólica via Pix. Isso ajuda a manter o projeto ativo e a desenvolver novas funcionalidades.
-
-> **Chave Pix:** `pixdojp@gmail.com`
-
-Qualquer valor é muito bem-vindo! 🙏
 
 ### Contribuindo
 

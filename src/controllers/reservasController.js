@@ -1,11 +1,9 @@
 'use strict';
 
 const { getDb } = require('../database');
+const { rows, row } = require('../database/helpers');
 
 const DIAS_RESERVA = Number(process.env.DIAS_RESERVA || 3);
-
-function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
-function row(r)  { return rows(r)[0] ?? null; }
 
 function hoje() {
   return new Date().toISOString().split('T')[0];

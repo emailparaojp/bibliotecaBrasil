@@ -1,0 +1,55 @@
+services:
+
+  # ─── Banco de dados MariaDB ───────────────────────────────────────────────────
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: biblioteca
+      MYSQL_USER: biblioteca
+      MYSQL_PASSWORD: biblioteca123
+      MYSQL_ROOT_PASSWORD: root123
+    volumes:
+      - mariadbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "biblioteca", "-pbiblioteca123"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  # ─── Aplicação ───────────────────────────────────────────────────────────────
+  app:
+    build: .
+    restart: on-failure
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      DATABASE_URL: mysql://biblioteca:biblioteca123@db:3306/biblioteca
+      JWT_SECRET: ${JWT_SECRET:-troque_esta_chave_em_producao_use_algo_longo_e_aleatorio}
+      JWT_EXPIRES_IN: 7d
+      MULTA_DIARIA: 0.50
+      DIAS_EMPRESTIMO_ESTUDANTE: 7
+      DIAS_EMPRESTIMO_PROFESSOR: 14
+      DIAS_EMPRESTIMO_COMUM: 7
+      MAX_EMPRESTIMOS_ESTUDANTE: 3
+      MAX_EMPRESTIMOS_PROFESSOR: 5
+      MAX_EMPRESTIMOS_COMUM: 2
+      MAX_RENOVACOES: 2
+      DIAS_RESERVA: 3
+      DIAS_VALIDADE_MEMBRO: 365
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  mariadbdata:
+    driver: local

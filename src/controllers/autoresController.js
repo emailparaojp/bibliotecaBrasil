@@ -1,9 +1,7 @@
 'use strict';
 
 const { getDb } = require('../database');
-
-function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
-function row(r)  { return rows(r)[0] ?? null; }
+const { rows, row } = require('../database/helpers');
 
 const autoresController = {
   async listar(req, res) {
@@ -40,7 +38,7 @@ const autoresController = {
       LEFT JOIN categorias c ON c.id = l.id_categoria
       LEFT JOIN exemplares e ON e.id_livro = l.id
       WHERE l.id_autor = ?
-      GROUP BY l.id ORDER BY l.titulo
+      GROUP BY l.id, c.nome ORDER BY l.titulo
     `, [autor.id]));
     res.json({ ...autor, livros });
   },

@@ -1,9 +1,7 @@
 'use strict';
 
 const { getDb } = require('../database');
-
-function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
-function row(r)  { return rows(r)[0] ?? null; }
+const { rows, row } = require('../database/helpers');
 
 const livrosController = {
   async listar(req, res) {
@@ -54,7 +52,7 @@ const livrosController = {
       LEFT JOIN categorias c ON c.id = l.id_categoria
       LEFT JOIN exemplares e ON e.id_livro = l.id
       ${whereClause}
-      GROUP BY l.id
+      GROUP BY l.id, a.id, a.nome, ed.id, ed.nome, c.id, c.nome
       ${havingDisp}
       ORDER BY l.titulo
       LIMIT ? OFFSET ?

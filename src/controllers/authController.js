@@ -1,13 +1,11 @@
 'use strict';
 
 const { getDb }      = require('../database');
+const { rows, row }  = require('../database/helpers');
 const bcrypt         = require('bcryptjs');
 const jwt            = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { validarCPF, limparCPF } = require('../utils/cpf');
-
-function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
-function row(r)  { return rows(r)[0] ?? null; }
 
 function makeToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, {
@@ -106,7 +104,7 @@ const authController = {
         (SELECT COUNT(*) FROM emprestimos WHERE id_membro = m.id AND status IN ('Ativo','Atrasado')) as emp_ativos,
         (SELECT COUNT(*) FROM reservas WHERE id_membro = m.id AND status = 'Ativa') as reservas_ativas,
         (SELECT COUNT(*) FROM multas WHERE id_membro = m.id AND pago = 0) as multas_pendentes,
-        (SELECT ROUND(COALESCE(SUM(valor),0),2) FROM multas WHERE id_membro = m.id AND pago = 0) as valor_multas_pendentes
+        (SELECT ROUND(COALESCE(SUM(valor),0), 2) FROM multas WHERE id_membro = m.id AND pago = 0) as valor_multas_pendentes
       FROM membros m WHERE m.id = ?
     `, [req.membro.id]));
 

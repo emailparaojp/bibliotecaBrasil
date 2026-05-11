@@ -53,7 +53,7 @@ async function runMigrations() {
       t.text('descricao');
       t.text('capa_url');
       t.text('capa_mime').defaultTo('image/jpeg');
-      t.text('capa_base64');
+      t.specificType('capa_base64', 'MEDIUMTEXT');
       t.timestamp('created_at').defaultTo(knex.fn.now());
     });
   }
@@ -140,7 +140,7 @@ async function runMigrations() {
     await knex.schema.table('livros', t => t.text('capa_mime').defaultTo('image/jpeg'));
   }
   if (!(await knex.schema.hasColumn('livros', 'capa_base64'))) {
-    await knex.schema.table('livros', t => t.text('capa_base64'));
+    await knex.schema.table('livros', t => t.specificType('capa_base64', 'MEDIUMTEXT'));
   }
 
   await ensureAdminUser(knex);

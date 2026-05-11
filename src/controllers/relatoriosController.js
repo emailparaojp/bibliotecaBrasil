@@ -1,9 +1,8 @@
 'use strict';
 
 const { getDb } = require('../database');
-
-function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
-function row(r)  { return rows(r)[0] ?? null; }
+const { rows, row } = require('../database/helpers');
+const { isMysql, diasAtraso, diasRestantes, anoMes } = require('../database/dialect');
 
 const relatoriosController = {
   async acervo(req, res) {
@@ -21,7 +20,7 @@ const relatoriosController = {
       FROM categorias c
       LEFT JOIN livros l ON l.id_categoria = c.id
       LEFT JOIN exemplares e ON e.id_livro = l.id
-      GROUP BY c.id ORDER BY total_livros DESC
+      GROUP BY c.id, c.nome ORDER BY total_livros DESC
     `));
 
     const porCondicao = rows(await knex.raw(`
@@ -43,8 +42,10 @@ const relatoriosController = {
     let where = '';
     let params = [];
     if (periodo_dias) {
-      where = `AND em.data_emprestimo >= date('now', '-' || ? || ' days')`;
-      params.push(Number(periodo_dias));
+      // Calcula data em JS para evitar funções de data SQLite-específicas
+      const since = new Date(Date.now() - Number(periodo_dias) * 86400000).toISOString().split('T')[0];
+      where = `AND em.data_emprestimo >= ?`;
+      params.push(since);
     }
 
     const livros = rows(await knex.raw(`
@@ -59,7 +60,7 @@ const relatoriosController = {
       LEFT JOIN autores a ON a.id = l.id_autor
       LEFT JOIN categorias c ON c.id = l.id_categoria
       WHERE 1=1 ${where}
-      GROUP BY l.id
+      GROUP BY l.id, l.titulo, l.isbn, a.nome, c.nome
       ORDER BY total_emprestimos DESC
       LIMIT ?
     `, [...params, Number(limit)]));
@@ -76,7 +77,7 @@ const relatoriosController = {
              COUNT(CASE WHEN em.status IN ('Ativo', 'Atrasado') THEN 1 END) as emprestimos_ativos
       FROM membros m
       JOIN emprestimos em ON em.id_membro = m.id
-      GROUP BY m.id
+      GROUP BY m.id, m.nome, m.tipo
       ORDER BY total_emprestimos DESC
       LIMIT ?
     `, [Number(limit)]));
@@ -96,7 +97,7 @@ const relatoriosController = {
 
     const atrasadosPorTipo = rows(await knex.raw(`
       SELECT m.tipo, COUNT(*) as total_atrasados,
-             SUM(CAST((julianday('now') - julianday(em.data_prevista_devolucao)) AS INTEGER)) as total_dias_atraso
+             SUM(${diasAtraso(knex, 'em.data_prevista_devolucao')}) as total_dias_atraso
       FROM emprestimos em
       JOIN membros m ON m.id = em.id_membro
       WHERE em.status = 'Atrasado'
@@ -114,24 +115,30 @@ const relatoriosController = {
   async devolucoesPrevistas(req, res) {
     const knex = getDb();
     const { dias = 7 } = req.query;
+
+    // Datas calculadas em JS para compatibilidade cross-database
+    const hoje   = new Date().toISOString().split('T')[0];
+    const limite = new Date(Date.now() + Number(dias) * 86400000).toISOString().split('T')[0];
+
     const devolucoes = rows(await knex.raw(`
       SELECT em.id, em.data_prevista_devolucao,
              m.nome as membro_nome, m.email, m.telefone,
              l.titulo as livro_titulo, ex.num_tombo,
-             CAST((julianday(em.data_prevista_devolucao) - julianday('now')) AS INTEGER) as dias_restantes
+             ${diasRestantes(knex, 'em.data_prevista_devolucao')} as dias_restantes
       FROM emprestimos em
       JOIN membros m ON m.id = em.id_membro
       JOIN exemplares ex ON ex.id = em.id_exemplar
       JOIN livros l ON l.id = ex.id_livro
       WHERE em.status IN ('Ativo', 'Atrasado')
-        AND em.data_prevista_devolucao BETWEEN date('now') AND date('now', '+' || ? || ' days')
+        AND em.data_prevista_devolucao BETWEEN ? AND ?
       ORDER BY em.data_prevista_devolucao ASC
-    `, [Number(dias)]));
+    `, [hoje, limite]));
     res.json({ dias_horizonte: Number(dias), total: devolucoes.length, devolucoes });
   },
 
   async inventario(req, res) {
     const knex = getDb();
+
     const livros = rows(await knex.raw(`
       SELECT l.id, l.isbn, l.titulo, l.localizacao,
              a.nome as autor,
@@ -144,7 +151,7 @@ const relatoriosController = {
       LEFT JOIN autores a ON a.id = l.id_autor
       LEFT JOIN categorias c ON c.id = l.id_categoria
       LEFT JOIN exemplares e ON e.id_livro = l.id
-      GROUP BY l.id
+      GROUP BY l.id, l.isbn, l.titulo, l.localizacao, a.nome, c.nome
       ORDER BY l.localizacao, l.titulo
     `));
     res.json({ total: livros.length, livros });
@@ -164,7 +171,7 @@ const relatoriosController = {
     `));
 
     const porMes = rows(await knex.raw(`
-      SELECT strftime('%Y-%m', data_geracao) as mes,
+      SELECT ${anoMes(knex, 'data_geracao')} as mes,
              COUNT(*) as total,
              ROUND(SUM(valor), 2) as valor_gerado,
              ROUND(SUM(CASE WHEN pago = 1 THEN valor ELSE 0 END), 2) as valor_recebido
@@ -184,7 +191,7 @@ const relatoriosController = {
       FROM membros m
       JOIN multas mu ON mu.id_membro = m.id
       WHERE mu.pago = 0
-      GROUP BY m.id
+      GROUP BY m.id, m.nome, m.email, m.telefone, m.tipo
       ORDER BY total_pendente DESC
     `));
     res.json({ total: membros.length, membros });
@@ -201,15 +208,17 @@ const relatoriosController = {
       .where('data_expiracao', '<', knex.raw('CURRENT_DATE'))
       .update({ status: 'Expirada' });
 
+    const hoje = new Date().toISOString().split('T')[0];
+
     const totalLivros     = Number((await knex('livros').count('id as c').first()).c);
     const totalExemplares = Number((await knex('exemplares').count('id as c').first()).c);
     const totalMembros    = Number((await knex('membros').where({ ativo: 1 }).count('id as c').first()).c);
     const empAtivos       = Number((await knex('emprestimos').whereIn('status', ['Ativo', 'Atrasado']).count('id as c').first()).c);
     const empAtrasados    = Number((await knex('emprestimos').where({ status: 'Atrasado' }).count('id as c').first()).c);
     const reservasAtivas  = Number((await knex('reservas').where({ status: 'Ativa' }).count('id as c').first()).c);
-    const multasPendentes = row(await knex.raw('SELECT COUNT(*) as c, ROUND(COALESCE(SUM(valor),0),2) as valor FROM multas WHERE pago = 0'));
-    const empHoje         = Number((await knex('emprestimos').whereRaw("date(created_at) = date('now')").count('id as c').first()).c);
-    const devHoje         = Number((await knex('emprestimos').whereRaw("data_devolucao = date('now')").count('id as c').first()).c);
+    const multasPendentes = row(await knex.raw('SELECT COUNT(*) as c, ROUND(COALESCE(SUM(valor),0), 2) as valor FROM multas WHERE pago = 0'));
+    const empHoje         = Number((await knex('emprestimos').whereRaw('DATE(created_at) = ?', [hoje]).count('id as c').first()).c);
+    const devHoje         = Number((await knex('emprestimos').whereRaw('data_devolucao = ?', [hoje]).count('id as c').first()).c);
 
     res.json({
       acervo:      { livros: totalLivros, exemplares: totalExemplares },

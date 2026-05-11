@@ -4,8 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt    = require('jsonwebtoken');
 const { getDb } = require('../database');
 const { validarCPF, limparCPF } = require('../utils/cpf');
-
-function row(r) { const rows = Array.isArray(r) ? r : (r.rows || []); return rows[0] ?? null; }
+const { row } = require('../database/helpers');
 
 const PERFIS_ADMIN = ['admin', 'bibliotecario'];
 

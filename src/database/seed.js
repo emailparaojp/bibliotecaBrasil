@@ -12,8 +12,16 @@ async function runSeed() {
   }
 
   await knex.transaction(async (trx) => {
+    // Helper: extract IDs from bulk insert result (MySQL returns only firstInsertId)
+    function extractIds(result, count) {
+      if (Array.isArray(result) && result.length === 1 && typeof result[0] === 'number' && count > 1) {
+        return Array.from({ length: count }, (_, i) => result[0] + i);
+      }
+      return result.map(r => (typeof r === 'object' ? r.id : r));
+    }
+
     // Autores
-    const autores = await trx('autores').insert([
+    const autoresData = [
       { nome: 'Machado de Assis',       nacionalidade: 'Brasileira', bio: 'Joaquim Maria Machado de Assis, maior escritor do Realismo brasileiro.' },
       { nome: 'Clarice Lispector',      nacionalidade: 'Brasileira', bio: 'Uma das mais importantes escritoras da literatura brasileira do século XX.' },
       { nome: 'Jorge Amado',            nacionalidade: 'Brasileira', bio: 'Um dos escritores brasileiros mais lidos em todo o mundo.' },
@@ -22,23 +30,23 @@ async function runSeed() {
       { nome: 'Gabriel García Márquez', nacionalidade: 'Colombiana', bio: 'Nobel de Literatura em 1982, pai do realismo mágico.' },
       { nome: 'J.K. Rowling',           nacionalidade: 'Britânica',  bio: 'Autora da série Harry Potter.' },
       { nome: 'George Orwell',          nacionalidade: 'Britânica',  bio: 'Autor de 1984 e A Revolução dos Bichos.' },
-    ]).returning('id');
-    const autorId = r => typeof r === 'object' ? r.id : r;
-    const aIds = autores.map(autorId);
+    ];
+    const autoresResult = await trx('autores').insert(autoresData).returning('id');
+    const aIds = extractIds(autoresResult, autoresData.length);
 
     // Editoras
-    const editoras = await trx('editoras').insert([
+    const editorasData = [
       { nome: 'Companhia das Letras', cidade: 'São Paulo',       pais: 'Brasil', site: 'https://www.companhiadasletras.com.br' },
       { nome: 'Record',               cidade: 'Rio de Janeiro',  pais: 'Brasil', site: 'https://www.record.com.br' },
       { nome: 'Rocco',                cidade: 'Rio de Janeiro',  pais: 'Brasil', site: 'https://www.rocco.com.br' },
       { nome: 'Editora Globo',        cidade: 'São Paulo',       pais: 'Brasil', site: 'https://www.globolivros.com.br' },
       { nome: 'Suma',                 cidade: 'São Paulo',       pais: 'Brasil', site: null },
-    ]).returning('id');
-    const edId = r => typeof r === 'object' ? r.id : r;
-    const eIds = editoras.map(edId);
+    ];
+    const editorasResult = await trx('editoras').insert(editorasData).returning('id');
+    const eIds = extractIds(editorasResult, editorasData.length);
 
     // Categorias
-    const cats = await trx('categorias').insert([
+    const categoriasData = [
       { nome: 'Romance',           descricao: 'Obras ficcionais em prosa que exploram relações humanas e emoções.' },
       { nome: 'Literatura Brasileira', descricao: 'Obras de autores nacionais com temática diversa.' },
       { nome: 'Ficção Científica', descricao: 'Narrativas baseadas em cenários futuristas ou científicos.' },
@@ -49,15 +57,15 @@ async function runSeed() {
       { nome: 'Biografia',         descricao: 'Relatos da vida de pessoas reais.' },
       { nome: 'Ciências Humanas',  descricao: 'Obras de filosofia, sociologia, história e afins.' },
       { nome: 'Infanto-Juvenil',   descricao: 'Obras destinadas a crianças e jovens.' },
-    ]).returning('id');
-    const catId = r => typeof r === 'object' ? r.id : r;
-    const cIds = cats.map(catId);
+    ];
+    const categoriasResult = await trx('categorias').insert(categoriasData).returning('id');
+    const cIds = extractIds(categoriasResult, categoriasData.length);
 
     const capaUrl = isbn => `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
     const daysAgoStr = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0]; };
 
-    // Livros (use fixed IDs from inserted autores/editoras/categorias)
-    const livros = await trx('livros').insert([
+    // Livros
+    const livrosData = [
       { isbn: '9788535902778', titulo: 'Dom Casmurro',                         id_autor: aIds[0], id_editora: eIds[0], id_categoria: cIds[0], ano_publicacao: 1899, edicao: '1ª', num_paginas: 256, localizacao: 'A-01', descricao: 'Clássico do Realismo brasileiro narrado por Bentinho.',                       capa_url: capaUrl('9788535902778') },
       { isbn: '9788535914849', titulo: 'Memórias Póstumas de Brás Cubas',      id_autor: aIds[0], id_editora: eIds[0], id_categoria: cIds[0], ano_publicacao: 1881, edicao: '1ª', num_paginas: 288, localizacao: 'A-01', descricao: 'Primeiro romance póstumo-realista da literatura brasileira.',                capa_url: capaUrl('9788535914849') },
       { isbn: '9788532511010', titulo: 'A Hora da Estrela',                    id_autor: aIds[1], id_editora: eIds[2], id_categoria: cIds[1], ano_publicacao: 1977, edicao: '1ª', num_paginas: 88,  localizacao: 'B-02', descricao: 'A última obra publicada em vida por Clarice Lispector.',                    capa_url: capaUrl('9788532511010') },
@@ -70,9 +78,9 @@ async function runSeed() {
       { isbn: '9788532521934', titulo: 'Harry Potter e a Pedra Filosofal',     id_autor: aIds[6], id_editora: eIds[2], id_categoria: cIds[3], ano_publicacao: 1997, edicao: '1ª', num_paginas: 232, localizacao: 'G-07', descricao: 'O início da jornada de Harry Potter no mundo mágico.',                     capa_url: capaUrl('9788532521934') },
       { isbn: '9788535914177', titulo: '1984',                                 id_autor: aIds[7], id_editora: eIds[0], id_categoria: cIds[4], ano_publicacao: 1949, edicao: '1ª', num_paginas: 416, localizacao: 'H-08', descricao: 'Distopia clássica sobre totalitarismo e vigilância.',                       capa_url: capaUrl('9788535914177') },
       { isbn: '9788535906424', titulo: 'A Revolução dos Bichos',               id_autor: aIds[7], id_editora: eIds[0], id_categoria: cIds[4], ano_publicacao: 1945, edicao: '1ª', num_paginas: 152, localizacao: 'H-08', descricao: 'Alegoria política sobre totalitarismo usando animais.',                     capa_url: capaUrl('9788535906424') },
-    ]).returning('id');
-    const livroId = r => typeof r === 'object' ? r.id : r;
-    const lIds = livros.map(livroId);
+    ];
+    const livrosResult = await trx('livros').insert(livrosData).returning('id');
+    const lIds = extractIds(livrosResult, livrosData.length);
 
     // Exemplares
     const exemplaresData = [

@@ -9,10 +9,9 @@ function getDb() {
   if (!knex) {
     if (process.env.DATABASE_URL) {
       knex = require('knex')({
-        client: 'pg',
+        client: 'mysql2',
         connection: process.env.DATABASE_URL,
         pool: { min: 2, max: 10 },
-        searchPath: ['public'],
       });
     } else {
       const DB_PATH = path.resolve(process.env.DB_PATH || './biblioteca.db');

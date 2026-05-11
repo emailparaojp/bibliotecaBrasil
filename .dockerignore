@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log*
+.env
+biblioteca.db
+biblioteca.db-shm
+biblioteca.db-wal
+docker-entrypoint.sh
+.git
+.gitignore
+*.md

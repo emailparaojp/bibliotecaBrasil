@@ -1,9 +1,7 @@
 'use strict';
 
 const { getDb } = require('../database');
-
-function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
-function row(r)  { return rows(r)[0] ?? null; }
+const { rows, row } = require('../database/helpers');
 
 const portalController = {
 
@@ -48,11 +46,11 @@ const portalController = {
       ${joins}
       LEFT JOIN exemplares ex ON ex.id_livro = l.id
       ${where}
-      GROUP BY l.id
+      GROUP BY l.id, a.nome, e.nome, c.nome
     `;
 
     if (disponivel === '1' || disponivel === 'true') {
-      sql += ` HAVING disponiveis > 0`;
+      sql += ` HAVING SUM(CASE WHEN ex.disponivel = 1 THEN 1 ELSE 0 END) > 0`;
     }
 
     sql += ` ORDER BY l.titulo LIMIT ? OFFSET ?`;

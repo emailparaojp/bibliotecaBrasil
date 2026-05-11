@@ -1,9 +1,7 @@
 'use strict';
 
 const { getDb } = require('../database');
-
-function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
-function row(r)  { return rows(r)[0] ?? null; }
+const { rows, row } = require('../database/helpers');
 
 const editorasController = {
   async listar(req, res) {

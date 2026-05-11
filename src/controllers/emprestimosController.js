@@ -1,6 +1,8 @@
 'use strict';
 
 const { getDb } = require('../database');
+const { rows, row } = require('../database/helpers');
+const { diasAtraso } = require('../database/dialect');
 
 const REGRAS = {
   Estudante: {
@@ -18,9 +20,6 @@ const REGRAS = {
 };
 const MAX_RENOVACOES = Number(process.env.MAX_RENOVACOES || 2);
 const MULTA_DIARIA   = Number(process.env.MULTA_DIARIA || 0.50);
-
-function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
-function row(r)  { return rows(r)[0] ?? null; }
 
 function somarDias(dataStr, dias) {
   const d = new Date(dataStr + 'T12:00:00');
@@ -71,7 +70,7 @@ const emprestimosController = {
              l.id as livro_id, l.titulo as livro_titulo, l.isbn,
              ex.num_tombo,
              CASE WHEN em.status = 'Atrasado'
-               THEN CAST((julianday('now') - julianday(em.data_prevista_devolucao)) AS INTEGER)
+               THEN ${diasAtraso(knex, 'em.data_prevista_devolucao')}
                ELSE 0 END as dias_atraso,
              mu.valor as multa_valor, mu.pago as multa_paga
       FROM emprestimos em
@@ -96,7 +95,7 @@ const emprestimosController = {
              l.titulo as livro_titulo, l.isbn,
              ex.num_tombo, ex.condicao,
              CASE WHEN em.status = 'Atrasado'
-               THEN CAST((julianday('now') - julianday(em.data_prevista_devolucao)) AS INTEGER)
+               THEN ${diasAtraso(knex, 'em.data_prevista_devolucao')}
                ELSE 0 END as dias_atraso,
              mu.id as multa_id, mu.valor as multa_valor, mu.pago as multa_paga
       FROM emprestimos em
@@ -247,8 +246,8 @@ const emprestimosController = {
     await atualizarAtrasos(knex);
     const atrasados = rows(await knex.raw(`
       SELECT em.id, em.data_emprestimo, em.data_prevista_devolucao,
-             CAST((julianday('now') - julianday(em.data_prevista_devolucao)) AS INTEGER) as dias_atraso,
-             CAST((julianday('now') - julianday(em.data_prevista_devolucao)) AS INTEGER) * ? as multa_estimada,
+             ${diasAtraso(knex, 'em.data_prevista_devolucao')} as dias_atraso,
+             ${diasAtraso(knex, 'em.data_prevista_devolucao')} * ? as multa_estimada,
              m.id as membro_id, m.nome as membro_nome, m.email, m.telefone,
              l.titulo as livro_titulo, ex.num_tombo
       FROM emprestimos em
