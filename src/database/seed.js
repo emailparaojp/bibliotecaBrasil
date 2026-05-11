@@ -46,21 +46,23 @@ function runSeed() {
 
     // Livros
     const insLivro = db.prepare(`
-      INSERT INTO livros (isbn, titulo, subtitulo, id_autor, id_editora, id_categoria, ano_publicacao, edicao, num_paginas, localizacao, descricao)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      INSERT INTO livros (isbn, titulo, subtitulo, id_autor, id_editora, id_categoria, ano_publicacao, edicao, num_paginas, localizacao, descricao, capa_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
-    insLivro.run('9788535902778', 'Dom Casmurro', null, 1, 1, 1, 1899, '1ª', 256, 'A-01', 'Clássico do Realismo brasileiro narrado por Bentinho.');
-    insLivro.run('9788535914849', 'Memórias Póstumas de Brás Cubas', null, 1, 1, 1, 1881, '1ª', 288, 'A-01', 'Primeiro romance póstumo-realista da literatura brasileira.');
-    insLivro.run('9788532511010', 'A Hora da Estrela', null, 2, 3, 2, 1977, '1ª', 88, 'B-02', 'A última obra publicada em vida por Clarice Lispector.');
-    insLivro.run('9788532523440', 'A Paixão Segundo G.H.', null, 2, 3, 2, 1964, '1ª', 152, 'B-02', 'Mergulho na consciência de uma mulher após um ato perturbador.');
-    insLivro.run('9788501088628', 'Gabriela, Cravo e Canela', null, 3, 2, 1, 1958, '1ª', 390, 'C-03', 'Marco da literatura nordestina de Jorge Amado.');
-    insLivro.run('9788501083388', 'Capitães da Areia', null, 3, 2, 2, 1937, '1ª', 320, 'C-03', 'Meninos de rua em Salvador nos anos 1930.');
-    insLivro.run('9788578273132', 'Vidas Secas', null, 4, 1, 2, 1938, '1ª', 176, 'D-04', 'O sofrimento de uma família de retirantes no sertão nordestino.');
-    insLivro.run('9789722039598', 'Ensaio sobre a Cegueira', null, 5, 1, 1, 1995, '1ª', 310, 'E-05', 'Uma epidemia de cegueira branca assola uma cidade.');
-    insLivro.run('9788501039385', 'Cem Anos de Solidão', null, 6, 2, 6, 1967, '1ª', 448, 'F-06', 'A saga da família Buendía ao longo de sete gerações.');
-    insLivro.run('9788532521934', 'Harry Potter e a Pedra Filosofal', null, 7, 3, 4, 1997, '1ª', 232, 'G-07', 'O início da jornada de Harry Potter no mundo mágico.');
-    insLivro.run('9788535914177', '1984', null, 8, 1, 5, 1949, '1ª', 416, 'H-08', 'Distopia clássica sobre totalitarismo e vigilância.');
-    insLivro.run('9788535906424', 'A Revolução dos Bichos', null, 8, 1, 5, 1945, '1ª', 152, 'H-08', 'Alegoria política sobre totalitarismo usando animais.');
+    const capaUrl = isbn => `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
+
+    insLivro.run('9788535902778', 'Dom Casmurro', null, 1, 1, 1, 1899, '1ª', 256, 'A-01', 'Clássico do Realismo brasileiro narrado por Bentinho.', capaUrl('9788535902778'));
+    insLivro.run('9788535914849', 'Memórias Póstumas de Brás Cubas', null, 1, 1, 1, 1881, '1ª', 288, 'A-01', 'Primeiro romance póstumo-realista da literatura brasileira.', capaUrl('9788535914849'));
+    insLivro.run('9788532511010', 'A Hora da Estrela', null, 2, 3, 2, 1977, '1ª', 88, 'B-02', 'A última obra publicada em vida por Clarice Lispector.', capaUrl('9788532511010'));
+    insLivro.run('9788532523440', 'A Paixão Segundo G.H.', null, 2, 3, 2, 1964, '1ª', 152, 'B-02', 'Mergulho na consciência de uma mulher após um ato perturbador.', capaUrl('9788532523440'));
+    insLivro.run('9788501088628', 'Gabriela, Cravo e Canela', null, 3, 2, 1, 1958, '1ª', 390, 'C-03', 'Marco da literatura nordestina de Jorge Amado.', capaUrl('9788501088628'));
+    insLivro.run('9788501083388', 'Capitães da Areia', null, 3, 2, 2, 1937, '1ª', 320, 'C-03', 'Meninos de rua em Salvador nos anos 1930.', capaUrl('9788501083388'));
+    insLivro.run('9788578273132', 'Vidas Secas', null, 4, 1, 2, 1938, '1ª', 176, 'D-04', 'O sofrimento de uma família de retirantes no sertão nordestino.', capaUrl('9788578273132'));
+    insLivro.run('9789722039598', 'Ensaio sobre a Cegueira', null, 5, 1, 1, 1995, '1ª', 310, 'E-05', 'Uma epidemia de cegueira branca assola uma cidade.', capaUrl('9789722039598'));
+    insLivro.run('9788501039385', 'Cem Anos de Solidão', null, 6, 2, 6, 1967, '1ª', 448, 'F-06', 'A saga da família Buendía ao longo de sete gerações.', capaUrl('9788501039385'));
+    insLivro.run('9788532521934', 'Harry Potter e a Pedra Filosofal', null, 7, 3, 4, 1997, '1ª', 232, 'G-07', 'O início da jornada de Harry Potter no mundo mágico.', capaUrl('9788532521934'));
+    insLivro.run('9788535914177', '1984', null, 8, 1, 5, 1949, '1ª', 416, 'H-08', 'Distopia clássica sobre totalitarismo e vigilância.', capaUrl('9788535914177'));
+    insLivro.run('9788535906424', 'A Revolução dos Bichos', null, 8, 1, 5, 1945, '1ª', 152, 'H-08', 'Alegoria política sobre totalitarismo usando animais.', capaUrl('9788535906424'));
 
     // Exemplares (2 a 4 por livro)
     const insExemplar = db.prepare(`
