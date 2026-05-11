@@ -2,7 +2,7 @@
 
 > **Projeto open source · Uso livre e gratuito**
 
-Sistema completo de gerenciamento de biblioteca física com **portal público**, **painel administrativo** e **API REST**, construído com **Node.js + Express**. Funciona com **SQLite** (sem configuração) ou **PostgreSQL** (para ambientes de produção).
+Sistema completo de gerenciamento de biblioteca física com **portal público**, **painel administrativo** e **API REST**, construído com **Node.js + Express**. Funciona com **SQLite** (sem configuração) ou **MariaDB/MySQL** (para ambientes de produção).
 
 Criado para ajudar pequenas bibliotecas — escolares, comunitárias, paroquiais e municipais — a organizarem seus acervos de forma moderna, sem custo algum. Qualquer biblioteca pode usar, copiar, modificar e distribuir este software livremente. Se precisar de ajuda para instalar ou adaptar o sistema, podemos ajudar.
 
@@ -195,7 +195,9 @@ bibliotecaBrasil/
     ├── server.js                # Ponto de entrada
     ├── app.js                   # Configuração Express + servir SPAs
     ├── database/
-    │   ├── index.js             # Conexão SQLite (WAL + FK)
+    │   ├── index.js             # Conexão Knex: detecta SQLite ou MariaDB/MySQL automaticamente
+    │   ├── dialect.js           # Helpers SQL cross-database (datas, GROUP_CONCAT, etc.)
+    │   ├── helpers.js           # Normaliza resultados de knex.raw() entre bancos
     │   ├── migrations.js        # Schema + migrações incrementais + admin padrão
     │   ├── seed.js              # Seed básico (12 livros, 8 membros)
     │   └── seedRich.js          # Seed de demonstração (30 livros, 21 membros…)
@@ -580,5 +582,3 @@ git commit -m "feat: minha melhoria"
 ```
 
 Sugestões de melhorias, reportes de bugs e pedidos de funcionalidades podem ser feitos via [Issues no GitHub](https://github.com/emailparaojp/bibliotecaBrasil/issues).
-
-## Este é um projeto de código aberto para ajudar pequenas bibliotecas a controlarem seu acervo. Isso é gratuito e auxiliamos na implementação
