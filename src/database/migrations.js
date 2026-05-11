@@ -3,149 +3,147 @@
 const bcrypt = require('bcryptjs');
 const { getDb } = require('./index');
 
-function runMigrations() {
-  const db = getDb();
+async function runMigrations() {
+  const knex = getDb();
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS autores (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome       TEXT NOT NULL,
-      nacionalidade TEXT,
-      bio        TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS editoras (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome       TEXT NOT NULL,
-      cidade     TEXT,
-      pais       TEXT DEFAULT 'Brasil',
-      site       TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS categorias (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome       TEXT NOT NULL UNIQUE,
-      descricao  TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS livros (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      isbn            TEXT UNIQUE,
-      titulo          TEXT NOT NULL,
-      subtitulo       TEXT,
-      id_autor        INTEGER REFERENCES autores(id) ON DELETE SET NULL,
-      id_editora      INTEGER REFERENCES editoras(id) ON DELETE SET NULL,
-      id_categoria    INTEGER REFERENCES categorias(id) ON DELETE SET NULL,
-      ano_publicacao  INTEGER,
-      edicao          TEXT,
-      num_paginas     INTEGER,
-      idioma          TEXT DEFAULT 'Português',
-      localizacao     TEXT,
-      descricao       TEXT,
-      capa_url        TEXT,
-      created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS exemplares (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      id_livro        INTEGER NOT NULL REFERENCES livros(id) ON DELETE CASCADE,
-      num_tombo       TEXT NOT NULL UNIQUE,
-      condicao        TEXT NOT NULL DEFAULT 'Bom'
-                        CHECK(condicao IN ('Novo', 'Bom', 'Regular', 'Ruim')),
-      disponivel      INTEGER NOT NULL DEFAULT 1,
-      data_aquisicao  DATE,
-      created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS membros (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome            TEXT NOT NULL,
-      cpf             TEXT NOT NULL UNIQUE,
-      email           TEXT UNIQUE,
-      telefone        TEXT,
-      endereco        TEXT,
-      tipo            TEXT NOT NULL DEFAULT 'Comum'
-                        CHECK(tipo IN ('Estudante', 'Professor', 'Comum')),
-      data_cadastro   DATE DEFAULT (date('now')),
-      data_validade   DATE NOT NULL,
-      ativo           INTEGER NOT NULL DEFAULT 1,
-      observacoes     TEXT,
-      senha_hash      TEXT,
-      created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS emprestimos (
-      id                       INTEGER PRIMARY KEY AUTOINCREMENT,
-      id_exemplar              INTEGER NOT NULL REFERENCES exemplares(id),
-      id_membro                INTEGER NOT NULL REFERENCES membros(id),
-      data_emprestimo          DATE NOT NULL DEFAULT (date('now')),
-      data_prevista_devolucao  DATE NOT NULL,
-      data_devolucao           DATE,
-      num_renovacoes           INTEGER NOT NULL DEFAULT 0,
-      status                   TEXT NOT NULL DEFAULT 'Ativo'
-                                 CHECK(status IN ('Ativo', 'Devolvido', 'Atrasado', 'Renovado')),
-      created_at               DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS reservas (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      id_livro        INTEGER NOT NULL REFERENCES livros(id),
-      id_membro       INTEGER NOT NULL REFERENCES membros(id),
-      data_reserva    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      data_expiracao  DATE NOT NULL,
-      status          TEXT NOT NULL DEFAULT 'Ativa'
-                        CHECK(status IN ('Ativa', 'Cancelada', 'Expirada', 'Concluida')),
-      created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS multas (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      id_emprestimo   INTEGER NOT NULL REFERENCES emprestimos(id),
-      id_membro       INTEGER NOT NULL REFERENCES membros(id),
-      valor           REAL NOT NULL,
-      motivo          TEXT NOT NULL,
-      data_geracao    DATE NOT NULL DEFAULT (date('now')),
-      data_pagamento  DATE,
-      pago            INTEGER NOT NULL DEFAULT 0,
-      created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_livros_titulo      ON livros(titulo);
-    CREATE INDEX IF NOT EXISTS idx_livros_isbn        ON livros(isbn);
-    CREATE INDEX IF NOT EXISTS idx_livros_autor       ON livros(id_autor);
-    CREATE INDEX IF NOT EXISTS idx_livros_categoria   ON livros(id_categoria);
-    CREATE INDEX IF NOT EXISTS idx_exemplares_livro   ON exemplares(id_livro);
-    CREATE INDEX IF NOT EXISTS idx_exemplares_disp    ON exemplares(disponivel);
-    CREATE INDEX IF NOT EXISTS idx_emprestimos_membro ON emprestimos(id_membro);
-    CREATE INDEX IF NOT EXISTS idx_emprestimos_status ON emprestimos(status);
-    CREATE INDEX IF NOT EXISTS idx_reservas_membro    ON reservas(id_membro);
-    CREATE INDEX IF NOT EXISTS idx_reservas_livro     ON reservas(id_livro);
-    CREATE INDEX IF NOT EXISTS idx_multas_membro      ON multas(id_membro);
-    CREATE INDEX IF NOT EXISTS idx_multas_pago        ON multas(pago);
-  `);
-
-  // Migração incremental: adiciona colunas que podem não existir em bancos antigos
-  const cols = db.prepare("PRAGMA table_info(membros)").all().map(c => c.name);
-  if (!cols.includes('senha_hash')) {
-    db.exec('ALTER TABLE membros ADD COLUMN senha_hash TEXT');
-  }
-  if (!cols.includes('perfil')) {
-    db.exec("ALTER TABLE membros ADD COLUMN perfil TEXT DEFAULT NULL");
+  if (!(await knex.schema.hasTable('autores'))) {
+    await knex.schema.createTable('autores', t => {
+      t.increments('id');
+      t.text('nome').notNullable();
+      t.text('nacionalidade');
+      t.text('bio');
+      t.timestamp('created_at').defaultTo(knex.fn.now());
+    });
   }
 
-  const livrosCols = db.prepare("PRAGMA table_info(livros)").all().map(c => c.name);
-  if (!livrosCols.includes('capa_mime')) {
-    db.exec('ALTER TABLE livros ADD COLUMN capa_mime TEXT DEFAULT \'image/jpeg\'');
-  }
-  if (!livrosCols.includes('capa_base64')) {
-    db.exec('ALTER TABLE livros ADD COLUMN capa_base64 TEXT');
+  if (!(await knex.schema.hasTable('editoras'))) {
+    await knex.schema.createTable('editoras', t => {
+      t.increments('id');
+      t.text('nome').notNullable();
+      t.text('cidade');
+      t.text('pais').defaultTo('Brasil');
+      t.text('site');
+      t.timestamp('created_at').defaultTo(knex.fn.now());
+    });
   }
 
-  ensureAdminUser(db);
+  if (!(await knex.schema.hasTable('categorias'))) {
+    await knex.schema.createTable('categorias', t => {
+      t.increments('id');
+      t.text('nome').notNullable().unique();
+      t.text('descricao');
+      t.timestamp('created_at').defaultTo(knex.fn.now());
+    });
+  }
 
+  if (!(await knex.schema.hasTable('livros'))) {
+    await knex.schema.createTable('livros', t => {
+      t.increments('id');
+      t.text('isbn').unique();
+      t.text('titulo').notNullable();
+      t.text('subtitulo');
+      t.integer('id_autor').references('id').inTable('autores').onDelete('SET NULL');
+      t.integer('id_editora').references('id').inTable('editoras').onDelete('SET NULL');
+      t.integer('id_categoria').references('id').inTable('categorias').onDelete('SET NULL');
+      t.integer('ano_publicacao');
+      t.text('edicao');
+      t.integer('num_paginas');
+      t.text('idioma').defaultTo('Português');
+      t.text('localizacao');
+      t.text('descricao');
+      t.text('capa_url');
+      t.text('capa_mime').defaultTo('image/jpeg');
+      t.text('capa_base64');
+      t.timestamp('created_at').defaultTo(knex.fn.now());
+    });
+  }
+
+  if (!(await knex.schema.hasTable('membros'))) {
+    await knex.schema.createTable('membros', t => {
+      t.increments('id');
+      t.text('nome').notNullable();
+      t.text('cpf').notNullable().unique();
+      t.text('email').unique();
+      t.text('telefone');
+      t.text('endereco');
+      t.text('tipo').notNullable().defaultTo('Comum');
+      t.date('data_cadastro').defaultTo(knex.raw('CURRENT_DATE'));
+      t.date('data_validade').notNullable();
+      t.integer('ativo').notNullable().defaultTo(1);
+      t.text('observacoes');
+      t.text('senha_hash');
+      t.text('perfil');
+      t.timestamp('created_at').defaultTo(knex.fn.now());
+    });
+  }
+
+  if (!(await knex.schema.hasTable('exemplares'))) {
+    await knex.schema.createTable('exemplares', t => {
+      t.increments('id');
+      t.integer('id_livro').notNullable().references('id').inTable('livros').onDelete('CASCADE');
+      t.text('num_tombo').notNullable().unique();
+      t.text('condicao').notNullable().defaultTo('Bom');
+      t.integer('disponivel').notNullable().defaultTo(1);
+      t.date('data_aquisicao');
+      t.timestamp('created_at').defaultTo(knex.fn.now());
+    });
+  }
+
+  if (!(await knex.schema.hasTable('emprestimos'))) {
+    await knex.schema.createTable('emprestimos', t => {
+      t.increments('id');
+      t.integer('id_exemplar').notNullable().references('id').inTable('exemplares');
+      t.integer('id_membro').notNullable().references('id').inTable('membros');
+      t.date('data_emprestimo').notNullable().defaultTo(knex.raw('CURRENT_DATE'));
+      t.date('data_prevista_devolucao').notNullable();
+      t.date('data_devolucao');
+      t.integer('num_renovacoes').notNullable().defaultTo(0);
+      t.text('status').notNullable().defaultTo('Ativo');
+      t.timestamp('created_at').defaultTo(knex.fn.now());
+    });
+  }
+
+  if (!(await knex.schema.hasTable('reservas'))) {
+    await knex.schema.createTable('reservas', t => {
+      t.increments('id');
+      t.integer('id_livro').notNullable().references('id').inTable('livros');
+      t.integer('id_membro').notNullable().references('id').inTable('membros');
+      t.timestamp('data_reserva').defaultTo(knex.fn.now());
+      t.date('data_expiracao').notNullable();
+      t.text('status').notNullable().defaultTo('Ativa');
+      t.timestamp('created_at').defaultTo(knex.fn.now());
+    });
+  }
+
+  if (!(await knex.schema.hasTable('multas'))) {
+    await knex.schema.createTable('multas', t => {
+      t.increments('id');
+      t.integer('id_emprestimo').notNullable().references('id').inTable('emprestimos');
+      t.integer('id_membro').notNullable().references('id').inTable('membros');
+      t.float('valor').notNullable();
+      t.text('motivo').notNullable();
+      t.date('data_geracao').notNullable().defaultTo(knex.raw('CURRENT_DATE'));
+      t.date('data_pagamento');
+      t.integer('pago').notNullable().defaultTo(0);
+      t.timestamp('created_at').defaultTo(knex.fn.now());
+    });
+  }
+
+  // Incremental migrations: add columns that may not exist in older databases
+  if (!(await knex.schema.hasColumn('membros', 'senha_hash'))) {
+    await knex.schema.table('membros', t => t.text('senha_hash'));
+  }
+  if (!(await knex.schema.hasColumn('membros', 'perfil'))) {
+    await knex.schema.table('membros', t => t.text('perfil').defaultTo(null));
+  }
+  if (!(await knex.schema.hasColumn('livros', 'capa_mime'))) {
+    await knex.schema.table('livros', t => t.text('capa_mime').defaultTo('image/jpeg'));
+  }
+  if (!(await knex.schema.hasColumn('livros', 'capa_base64'))) {
+    await knex.schema.table('livros', t => t.text('capa_base64'));
+  }
+
+  await ensureAdminUser(knex);
   console.log('✅ Migrations executadas com sucesso.');
 }
 
@@ -154,35 +152,36 @@ function runMigrations() {
  * CPF: 101.010.101-01 | Senha: administrador123
  * Idempotente — pode rodar múltiplas vezes.
  */
-function ensureAdminUser(db) {
+async function ensureAdminUser(knex) {
   const CPF_FMT = '101.010.101-01';
   const EMAIL   = 'admin@bibliotecabrasil.local';
 
-  // Remove entrada legada com CPF sem formatação (se existir)
-  db.prepare("DELETE FROM membros WHERE cpf = '10101010101' AND email = ?").run(EMAIL);
+  // Remove legacy entry with unformatted CPF (if any)
+  await knex('membros').where({ cpf: '10101010101', email: EMAIL }).delete();
 
-  const existing = db.prepare('SELECT id, senha_hash, perfil FROM membros WHERE cpf = ?').get(CPF_FMT);
+  const existing = await knex('membros').where({ cpf: CPF_FMT }).first();
   if (!existing) {
-    const hash = bcrypt.hashSync('administrador123', 10);
-    db.prepare(`
-      INSERT INTO membros (nome, cpf, email, telefone, endereco, tipo, data_validade, senha_hash, perfil)
-      VALUES (?, ?, ?, ?, ?, ?, date('now', '+10 years'), ?, ?)
-    `).run('Administrador', CPF_FMT, EMAIL, '', '', 'Professor', hash, 'admin');
+    const hash = await bcrypt.hash('administrador123', 10);
+    const validade = new Date();
+    validade.setFullYear(validade.getFullYear() + 10);
+    await knex('membros').insert({
+      nome: 'Administrador',
+      cpf: CPF_FMT,
+      email: EMAIL,
+      telefone: '',
+      endereco: '',
+      tipo: 'Professor',
+      data_validade: validade.toISOString().split('T')[0],
+      senha_hash: hash,
+      perfil: 'admin',
+    });
     console.log('👤 Usuário administrador padrão criado (CPF: 101.010.101-01).');
   } else {
-    const updates = [];
-    const params = [];
-    if (!existing.senha_hash) {
-      updates.push('senha_hash = ?');
-      params.push(bcrypt.hashSync('administrador123', 10));
-    }
-    if (!existing.perfil) {
-      updates.push('perfil = ?');
-      params.push('admin');
-    }
-    if (updates.length) {
-      params.push(CPF_FMT);
-      db.prepare(`UPDATE membros SET ${updates.join(', ')} WHERE cpf = ?`).run(...params);
+    const updates = {};
+    if (!existing.senha_hash) updates.senha_hash = await bcrypt.hash('administrador123', 10);
+    if (!existing.perfil) updates.perfil = 'admin';
+    if (Object.keys(updates).length) {
+      await knex('membros').where({ cpf: CPF_FMT }).update(updates);
       console.log('👤 Usuário administrador padrão atualizado.');
     }
   }

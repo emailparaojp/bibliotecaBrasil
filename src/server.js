@@ -7,10 +7,13 @@ const app               = require('./app');
 
 const PORT = Number(process.env.PORT || 3000);
 
-runMigrations();
-runSeed();
+async function start() {
+  await runMigrations();
+  await runSeed();
+  app.listen(PORT, () => {
+    console.log(`\n📚 Biblioteca Brasil API rodando em http://localhost:${PORT}`);
+    console.log(`   Health check: http://localhost:${PORT}/health\n`);
+  });
+}
 
-app.listen(PORT, () => {
-  console.log(`\n📚 Biblioteca Brasil API rodando em http://localhost:${PORT}`);
-  console.log(`   Health check: http://localhost:${PORT}/health\n`);
-});
+start().catch(console.error);

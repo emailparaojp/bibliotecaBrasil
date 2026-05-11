@@ -2,35 +2,38 @@
 
 const { getDb } = require('../database');
 
+function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
+function row(r)  { return rows(r)[0] ?? null; }
+
 const autoresController = {
-  listar(req, res) {
-    const db = getDb();
+  async listar(req, res) {
+    const knex = getDb();
     const { busca } = req.query;
-    let rows;
+    let result;
     if (busca) {
-      rows = db.prepare(`
+      result = await knex.raw(`
         SELECT a.*, COUNT(l.id) as total_livros
         FROM autores a
         LEFT JOIN livros l ON l.id_autor = a.id
         WHERE a.nome LIKE ? OR a.nacionalidade LIKE ?
         GROUP BY a.id ORDER BY a.nome
-      `).all(`%${busca}%`, `%${busca}%`);
+      `, [`%${busca}%`, `%${busca}%`]);
     } else {
-      rows = db.prepare(`
+      result = await knex.raw(`
         SELECT a.*, COUNT(l.id) as total_livros
         FROM autores a
         LEFT JOIN livros l ON l.id_autor = a.id
         GROUP BY a.id ORDER BY a.nome
-      `).all();
+      `);
     }
-    res.json(rows);
+    res.json(rows(result));
   },
 
-  buscarPorId(req, res) {
-    const db = getDb();
-    const autor = db.prepare('SELECT * FROM autores WHERE id = ?').get(req.params.id);
+  async buscarPorId(req, res) {
+    const knex = getDb();
+    const autor = row(await knex.raw('SELECT * FROM autores WHERE id = ?', [req.params.id]));
     if (!autor) return res.status(404).json({ erro: 'Autor não encontrado.' });
-    const livros = db.prepare(`
+    const livros = rows(await knex.raw(`
       SELECT l.id, l.titulo, l.ano_publicacao, l.isbn,
              c.nome as categoria, COUNT(e.id) as total_exemplares
       FROM livros l
@@ -38,34 +41,38 @@ const autoresController = {
       LEFT JOIN exemplares e ON e.id_livro = l.id
       WHERE l.id_autor = ?
       GROUP BY l.id ORDER BY l.titulo
-    `).all(autor.id);
+    `, [autor.id]));
     res.json({ ...autor, livros });
   },
 
-  criar(req, res) {
-    const db = getDb();
+  async criar(req, res) {
+    const knex = getDb();
     const { nome, nacionalidade, bio } = req.body;
-    const result = db.prepare('INSERT INTO autores (nome, nacionalidade, bio) VALUES (?, ?, ?)').run(nome, nacionalidade || null, bio || null);
-    res.status(201).json({ id: result.lastInsertRowid, nome, nacionalidade, bio });
+    const result = await knex('autores').insert({ nome, nacionalidade: nacionalidade || null, bio: bio || null }).returning('id');
+    const id = typeof result[0] === 'object' ? result[0].id : result[0];
+    res.status(201).json({ id, nome, nacionalidade, bio });
   },
 
-  atualizar(req, res) {
-    const db = getDb();
+  async atualizar(req, res) {
+    const knex = getDb();
     const { nome, nacionalidade, bio } = req.body;
-    const atual = db.prepare('SELECT * FROM autores WHERE id = ?').get(req.params.id);
+    const atual = row(await knex.raw('SELECT * FROM autores WHERE id = ?', [req.params.id]));
     if (!atual) return res.status(404).json({ erro: 'Autor não encontrado.' });
-    db.prepare('UPDATE autores SET nome = ?, nacionalidade = ?, bio = ? WHERE id = ?')
-      .run(nome ?? atual.nome, nacionalidade ?? atual.nacionalidade, bio ?? atual.bio, req.params.id);
+    await knex('autores').where({ id: req.params.id }).update({
+      nome:          nome          ?? atual.nome,
+      nacionalidade: nacionalidade ?? atual.nacionalidade,
+      bio:           bio           ?? atual.bio,
+    });
     res.json({ mensagem: 'Autor atualizado com sucesso.' });
   },
 
-  remover(req, res) {
-    const db = getDb();
-    const autor = db.prepare('SELECT * FROM autores WHERE id = ?').get(req.params.id);
+  async remover(req, res) {
+    const knex = getDb();
+    const autor = row(await knex.raw('SELECT * FROM autores WHERE id = ?', [req.params.id]));
     if (!autor) return res.status(404).json({ erro: 'Autor não encontrado.' });
-    const livros = db.prepare('SELECT COUNT(*) as c FROM livros WHERE id_autor = ?').get(req.params.id);
-    if (livros.c > 0) return res.status(409).json({ erro: 'Não é possível remover: autor possui livros cadastrados.' });
-    db.prepare('DELETE FROM autores WHERE id = ?').run(req.params.id);
+    const { c } = await knex('livros').where({ id_autor: req.params.id }).count('id as c').first();
+    if (Number(c) > 0) return res.status(409).json({ erro: 'Não é possível remover: autor possui livros cadastrados.' });
+    await knex('autores').where({ id: req.params.id }).delete();
     res.json({ mensagem: 'Autor removido com sucesso.' });
   },
 };

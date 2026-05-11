@@ -10,6 +10,278 @@
 require('dotenv').config();
 const bcrypt            = require('bcryptjs');
 const { runMigrations } = require('./migrations');
+const { getDb, closeDb } = require('./index');
+
+function daysAgo(n)     { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0]; }
+function daysFromNow(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
+function hoursAgo(n)    { const d = new Date(); d.setTime(d.getTime() - n * 3600000); return d.toISOString().replace('T', ' ').split('.')[0]; }
+function today()        { return new Date().toISOString().split('T')[0]; }
+
+async function runSeedRich() {
+  await runMigrations();
+  const knex = getDb();
+
+  console.log('🗑️  Limpando dados existentes...');
+
+  if (process.env.DATABASE_URL) {
+    await knex.raw('TRUNCATE multas, reservas, emprestimos, exemplares, livros, membros, categorias, editoras, autores RESTART IDENTITY CASCADE');
+  } else {
+    for (const t of ['multas','reservas','emprestimos','exemplares','livros','membros','categorias','editoras','autores']) {
+      await knex(t).delete();
+    }
+    try { await knex.raw('DELETE FROM sqlite_sequence'); } catch (_) { /* ok */ }
+  }
+
+  const adminHash = bcrypt.hashSync('administrador123', 10);
+
+  await knex.transaction(async (trx) => {
+
+    /* ─────────────────────────── AUTORES ─────────────────────────── */
+    await trx('autores').insert([
+      { nome: 'Machado de Assis',          nacionalidade: 'Brasileira', bio: 'Joaquim Maria Machado de Assis, maior escritor do Realismo brasileiro. Fundador e primeiro presidente da ABL.' },
+      { nome: 'Clarice Lispector',          nacionalidade: 'Brasileira', bio: 'Uma das mais importantes escritoras brasileiras do século XX, conhecida pelo estilo introspectivo e experimental.' },
+      { nome: 'Jorge Amado',                nacionalidade: 'Brasileira', bio: 'Um dos escritores brasileiros mais lidos em todo o mundo, célebre por retratar a Bahia e seu povo.' },
+      { nome: 'Graciliano Ramos',           nacionalidade: 'Brasileira', bio: 'Representante máximo do romance regionalista do Nordeste, com escrita seca e precisa.' },
+      { nome: 'José Saramago',              nacionalidade: 'Portuguesa', bio: 'Nobel de Literatura em 1998. Conhecido pelo estilo singular sem pontuação convencional.' },
+      { nome: 'Gabriel García Márquez',     nacionalidade: 'Colombiana', bio: 'Nobel de Literatura em 1982. Pai do realismo mágico com Cem Anos de Solidão.' },
+      { nome: 'J.K. Rowling',               nacionalidade: 'Britânica',  bio: 'Autora da saga Harry Potter, uma das séries mais vendidas da história da literatura.' },
+      { nome: 'George Orwell',              nacionalidade: 'Britânica',  bio: 'Autor de 1984 e A Revolução dos Bichos, obras fundamentais da literatura política do século XX.' },
+      { nome: 'João Guimarães Rosa',        nacionalidade: 'Brasileira', bio: 'Autor de Grande Sertão: Veredas, considerada a mais importante obra da literatura brasileira moderna.' },
+      { nome: 'Érico Veríssimo',            nacionalidade: 'Brasileira', bio: 'Escritor gaúcho, autor de O Tempo e o Vento, trilogia épica da história do Rio Grande do Sul.' },
+      { nome: 'Paulo Coelho',               nacionalidade: 'Brasileira', bio: 'Um dos escritores mais traduzidos do mundo, autor de O Alquimista.' },
+      { nome: 'Franz Kafka',                nacionalidade: 'Tcheca',     bio: 'Escritor austro-húngaro cujo nome originou o adjetivo kafkiano, para situações absurdas e opressivas.' },
+      { nome: 'Fiódor Dostoiévski',         nacionalidade: 'Russa',      bio: 'Um dos maiores romancistas da humanidade. Autor de Crime e Castigo e Os Irmãos Karamazov.' },
+      { nome: 'Antoine de Saint-Exupéry',  nacionalidade: 'Francesa',   bio: 'Aviador e escritor francês, autor do lendário O Pequeno Príncipe.' },
+      { nome: 'Umberto Eco',                nacionalidade: 'Italiana',   bio: 'Semioticista e romancista italiano, autor de O Nome da Rosa.' },
+      { nome: 'Agatha Christie',            nacionalidade: 'Britânica',  bio: 'A rainha do crime. A escritora mais vendida de todos os tempos, superada apenas pela Bíblia e Shakespeare.' },
+      { nome: 'Carlos Drummond de Andrade', nacionalidade: 'Brasileira', bio: 'O maior poeta brasileiro do século XX. Sua obra abrange desde o cotidiano até grandes questões existenciais.' },
+    ]);
+
+    /* ─────────────────────────── EDITORAS ────────────────────────── */
+    await trx('editoras').insert([
+      { nome: 'Companhia das Letras', cidade: 'São Paulo',      pais: 'Brasil', site: 'https://www.companhiadasletras.com.br' },
+      { nome: 'Record',               cidade: 'Rio de Janeiro', pais: 'Brasil', site: 'https://www.record.com.br' },
+      { nome: 'Rocco',                cidade: 'Rio de Janeiro', pais: 'Brasil', site: 'https://www.rocco.com.br' },
+      { nome: 'Editora Globo',        cidade: 'São Paulo',      pais: 'Brasil', site: 'https://www.globolivros.com.br' },
+      { nome: 'Arqueiro',             cidade: 'São Paulo',      pais: 'Brasil', site: 'https://www.arqueirobr.com.br' },
+      { nome: 'Saraiva',              cidade: 'São Paulo',      pais: 'Brasil', site: 'https://www.saraivaconteudo.com.br' },
+      { nome: 'L&PM',                 cidade: 'Porto Alegre',   pais: 'Brasil', site: 'https://www.lpm.com.br' },
+      { nome: 'Nova Fronteira',       cidade: 'Rio de Janeiro', pais: 'Brasil', site: 'https://www.novafronteira.com.br' },
+    ]);
+
+    /* ────────────────────────── CATEGORIAS ───────────────────────── */
+    await trx('categorias').insert([
+      { nome: 'Romance',              descricao: 'Obras ficcionais em prosa que exploram relações humanas, emoções e narrativas.' },
+      { nome: 'Literatura Brasileira',descricao: 'Obras de autores nacionais com temáticas diversas da realidade brasileira.' },
+      { nome: 'Ficção Científica',    descricao: 'Narrativas baseadas em cenários futuristas, tecnológicos ou científicos especulativos.' },
+      { nome: 'Fantasia',             descricao: 'Obras que incluem elementos mágicos, sobrenaturais ou mundos imaginários.' },
+      { nome: 'Distopia',             descricao: 'Ficção que retrata sociedades futuras opressivas, totalitárias ou degeneradas.' },
+      { nome: 'Realismo Mágico',      descricao: 'Corrente literária que mescla elementos da realidade cotidiana com fantasia e magia.' },
+      { nome: 'Poesia',               descricao: 'Obras em verso que exploram linguagem, ritmo, imagens e emoções.' },
+      { nome: 'Biografia',            descricao: 'Relatos da vida real de pessoas, escritos por terceiros ou autobiograficamente.' },
+      { nome: 'Ciências Humanas',     descricao: 'Obras de filosofia, sociologia, história, antropologia e áreas afins.' },
+      { nome: 'Infanto-Juvenil',      descricao: 'Obras destinadas a crianças e jovens, incluindo contos, fábulas e aventuras.' },
+      { nome: 'Mistério e Policial',  descricao: 'Narrativas de investigação criminal, detetives e suspense.' },
+      { nome: 'Clássicos Universais', descricao: 'Grandes obras da literatura mundial reconhecidas como patrimônio cultural da humanidade.' },
+    ]);
+
+    /* ──────────────────────────── LIVROS ─────────────────────────── */
+    const capaUrl = isbn => `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
+    await trx('livros').insert([
+      { isbn:'9788535902778', titulo:'Dom Casmurro',                     id_autor:1,  id_editora:1, id_categoria:1,  ano_publicacao:1899, edicao:'1ª', num_paginas:256, idioma:'Português', localizacao:'A-01', descricao:'Narrado por Bentinho, que suspeita de traição de Capitu. Clássico do Realismo brasileiro.',                                    capa_url:capaUrl('9788535902778') },
+      { isbn:'9788535914849', titulo:'Memórias Póstumas de Brás Cubas',  id_autor:1,  id_editora:1, id_categoria:1,  ano_publicacao:1881, edicao:'1ª', num_paginas:288, idioma:'Português', localizacao:'A-01', descricao:'Primeiro romance póstumo-realista: narrado por um defunto autor.',                                                             capa_url:capaUrl('9788535914849') },
+      { isbn:'9788535905618', titulo:'Quincas Borba',                    id_autor:1,  id_editora:1, id_categoria:1,  ano_publicacao:1891, edicao:'1ª', num_paginas:264, idioma:'Português', localizacao:'A-01', descricao:'Terceiro da trilogia realista: a loucura, a fortuna e o Humanitismo.',                                                         capa_url:capaUrl('9788535905618') },
+      { isbn:'9788532511010', titulo:'A Hora da Estrela',                id_autor:2,  id_editora:3, id_categoria:2,  ano_publicacao:1977, edicao:'1ª', num_paginas:88,  idioma:'Português', localizacao:'B-01', descricao:'Última obra publicada em vida: a nordestina Macabéa e a escrita como urgência.',                                              capa_url:capaUrl('9788532511010') },
+      { isbn:'9788532523440', titulo:'A Paixão Segundo G.H.',            id_autor:2,  id_editora:3, id_categoria:2,  ano_publicacao:1964, edicao:'1ª', num_paginas:152, idioma:'Português', localizacao:'B-01', descricao:'Mergulho na consciência de uma mulher após um ato perturbador envolvendo uma barata.',                                         capa_url:capaUrl('9788532523440') },
+      { isbn:'9788532523457', titulo:'Perto do Coração Selvagem',        id_autor:2,  id_editora:3, id_categoria:2,  ano_publicacao:1943, edicao:'1ª', num_paginas:192, idioma:'Português', localizacao:'B-01', descricao:'Primeiro romance de Clarice, de exploração interior radical.',                                                                capa_url:capaUrl('9788532523457') },
+      { isbn:'9788501088628', titulo:'Gabriela, Cravo e Canela',         id_autor:3,  id_editora:2, id_categoria:1,  ano_publicacao:1958, edicao:'1ª', num_paginas:390, idioma:'Português', localizacao:'C-01', descricao:'Marco da literatura nordestina: a chegada de Gabriela ao Ilhéus dos anos 1920.',                                              capa_url:capaUrl('9788501088628') },
+      { isbn:'9788501083388', titulo:'Capitães da Areia',                id_autor:3,  id_editora:2, id_categoria:2,  ano_publicacao:1937, edicao:'1ª', num_paginas:320, idioma:'Português', localizacao:'C-01', descricao:'Meninos de rua em Salvador nos anos 1930, sob o olhar humanista de Amado.',                                                  capa_url:capaUrl('9788501083388') },
+      { isbn:'9788501091697', titulo:'Tereza Batista Cansada de Guerra', id_autor:3,  id_editora:2, id_categoria:1,  ano_publicacao:1972, edicao:'1ª', num_paginas:360, idioma:'Português', localizacao:'C-01', descricao:'A história de uma mulher que luta contra o destino e a opressão no sertão baiano.',                                           capa_url:capaUrl('9788501091697') },
+      { isbn:'9788578273132', titulo:'Vidas Secas',                      id_autor:4,  id_editora:1, id_categoria:2,  ano_publicacao:1938, edicao:'1ª', num_paginas:176, idioma:'Português', localizacao:'D-01', descricao:'O sofrimento de Fabiano e sua família de retirantes no árido sertão nordestino.',                                             capa_url:capaUrl('9788578273132') },
+      { isbn:'9788578274016', titulo:'São Bernardo',                     id_autor:4,  id_editora:1, id_categoria:2,  ano_publicacao:1934, edicao:'1ª', num_paginas:196, idioma:'Português', localizacao:'D-01', descricao:'Paulo Honório constrói uma fazenda e uma vida à custa de tudo e todos.',                                                       capa_url:capaUrl('9788578274016') },
+      { isbn:'9789722039598', titulo:'Ensaio sobre a Cegueira',          id_autor:5,  id_editora:1, id_categoria:1,  ano_publicacao:1995, edicao:'1ª', num_paginas:310, idioma:'Português', localizacao:'E-01', descricao:'Uma epidemia de cegueira branca assola uma cidade — metáfora da perda da humanidade.',                                       capa_url:capaUrl('9789722039598') },
+      { isbn:'9789722041782', titulo:'O Evangelho Segundo Jesus Cristo', id_autor:5,  id_editora:1, id_categoria:1,  ano_publicacao:1991, edicao:'1ª', num_paginas:444, idioma:'Português', localizacao:'E-01', descricao:'Releitura ficcional da vida de Jesus Cristo, que gerou polêmica ao misturar o humano e o divino.',                             capa_url:capaUrl('9789722041782') },
+      { isbn:'9788501039385', titulo:'Cem Anos de Solidão',              id_autor:6,  id_editora:2, id_categoria:6,  ano_publicacao:1967, edicao:'1ª', num_paginas:448, idioma:'Português', localizacao:'F-01', descricao:'A saga épica da família Buendía e da cidade de Macondo ao longo de sete gerações.',                                           capa_url:capaUrl('9788501039385') },
+      { isbn:'9788501058225', titulo:'Amor nos Tempos do Cólera',        id_autor:6,  id_editora:2, id_categoria:1,  ano_publicacao:1985, edicao:'1ª', num_paginas:400, idioma:'Português', localizacao:'F-01', descricao:'A história de um amor não correspondido que dura mais de cinquenta anos.',                                                     capa_url:capaUrl('9788501058225') },
+      { isbn:'9788532521934', titulo:'Harry Potter e a Pedra Filosofal', id_autor:7,  id_editora:3, id_categoria:4,  ano_publicacao:1997, edicao:'1ª', num_paginas:232, idioma:'Português', localizacao:'G-01', descricao:'O início da jornada do jovem bruxo Harry Potter na Escola de Magia e Bruxaria de Hogwarts.',                                   capa_url:capaUrl('9788532521934') },
+      { isbn:'9788532523662', titulo:'Harry Potter e a Câmara Secreta',  id_autor:7,  id_editora:3, id_categoria:4,  ano_publicacao:1998, edicao:'1ª', num_paginas:272, idioma:'Português', localizacao:'G-01', descricao:'Harry retorna a Hogwarts e descobre uma câmara misteriosa que ameaça os alunos.',                                             capa_url:capaUrl('9788532523662') },
+      { isbn:'9788532527301', titulo:'Harry Potter e o Prisioneiro de Azkaban', id_autor:7, id_editora:3, id_categoria:4, ano_publicacao:1999, edicao:'1ª', num_paginas:336, idioma:'Português', localizacao:'G-01', descricao:'Um fugitivo perigoso escapa da prisão mágica de Azkaban e parece estar atrás de Harry.', capa_url:capaUrl('9788532527301') },
+      { isbn:'9788535914177', titulo:'1984',                             id_autor:8,  id_editora:1, id_categoria:5,  ano_publicacao:1949, edicao:'1ª', num_paginas:416, idioma:'Português', localizacao:'H-01', descricao:'Distopia clássica sobre vigilância total, manipulação da verdade e totalitarismo.',                                           capa_url:capaUrl('9788535914177') },
+      { isbn:'9788535906424', titulo:'A Revolução dos Bichos',           id_autor:8,  id_editora:1, id_categoria:5,  ano_publicacao:1945, edicao:'1ª', num_paginas:152, idioma:'Português', localizacao:'H-01', descricao:'Alegoria política sobre como revoluções podem ser corrompidas pelo poder.',                                                     capa_url:capaUrl('9788535906424') },
+      { isbn:'9788535903393', titulo:'Grande Sertão: Veredas',           id_autor:9,  id_editora:1, id_categoria:2,  ano_publicacao:1956, edicao:'1ª', num_paginas:608, idioma:'Português', localizacao:'I-01', descricao:'Monólogo de Riobaldo sobre pacto com o diabo, amor e violência nos sertões de Minas.',                                        capa_url:capaUrl('9788535903393') },
+      { isbn:'9788526001312', titulo:'O Tempo e o Vento — O Continente',  id_autor:10, id_editora:4, id_categoria:2, ano_publicacao:1949, edicao:'1ª', num_paginas:752, idioma:'Português', localizacao:'I-02', descricao:'Épica saga familiar que conta a história do Rio Grande do Sul através dos Terra Cambará.', capa_url:capaUrl('9788526001312') },
+      { isbn:'9788576655237', titulo:'O Alquimista',                     id_autor:11, id_editora:5, id_categoria:1,  ano_publicacao:1988, edicao:'1ª', num_paginas:208, idioma:'Português', localizacao:'J-01', descricao:'A jornada de Santiago, um pastor andaluz em busca de seu tesouro pessoal.',                                                    capa_url:capaUrl('9788576655237') },
+      { isbn:'9788525406866', titulo:'A Metamorfose',                    id_autor:12, id_editora:7, id_categoria:12, ano_publicacao:1915, edicao:'1ª', num_paginas:120, idioma:'Português', localizacao:'J-02', descricao:'Gregor Samsa acorda transformado em inseto — símbolo da alienação do homem moderno.',                                         capa_url:capaUrl('9788525406866') },
+      { isbn:'9788535914184', titulo:'Crime e Castigo',                  id_autor:13, id_editora:1, id_categoria:12, ano_publicacao:1866, edicao:'1ª', num_paginas:560, idioma:'Português', localizacao:'J-03', descricao:'Raskólnikov planeja e comete um assassinato e é dilacerado pela culpa e os questionamentos morais.',                            capa_url:capaUrl('9788535914184') },
+      { isbn:'9786558882893', titulo:'O Pequeno Príncipe',               id_autor:14, id_editora:8, id_categoria:10, ano_publicacao:1943, edicao:'1ª', num_paginas:96,  idioma:'Português', localizacao:'K-01', descricao:'O encontro de um aviador com um principezinho vindo de outro planeta, cheio de sabedoria.',                                    capa_url:capaUrl('9786558882893') },
+      { isbn:'9788501079824', titulo:'O Nome da Rosa',                   id_autor:15, id_editora:2, id_categoria:11, ano_publicacao:1980, edicao:'1ª', num_paginas:624, idioma:'Português', localizacao:'K-02', descricao:'Um monge e seu aprendiz investigam uma série de mortes misteriosas em uma abadia medieval.',                                    capa_url:capaUrl('9788501079824') },
+      { isbn:'9788504018752', titulo:'Morte no Nilo',                    id_autor:16, id_editora:6, id_categoria:11, ano_publicacao:1937, edicao:'1ª', num_paginas:288, idioma:'Português', localizacao:'K-03', descricao:'Hercule Poirot investiga um assassinato a bordo de um navio no Nilo egípcio.',                                               capa_url:capaUrl('9788504018752') },
+      { isbn:'9788504018769', titulo:'Assassinato no Expresso do Oriente', id_autor:16, id_editora:6, id_categoria:11, ano_publicacao:1934, edicao:'1ª', num_paginas:270, idioma:'Português', localizacao:'K-03', descricao:'Um passageiro é encontrado morto no famoso trem Orient Express. Poirot é o detetive.', capa_url:capaUrl('9788504018769') },
+      { isbn:'9788535916324', titulo:'Alguma Poesia',                    id_autor:17, id_editora:1, id_categoria:7,  ano_publicacao:1930, edicao:'1ª', num_paginas:96,  idioma:'Português', localizacao:'L-01', descricao:'Primeiro livro de poemas de Drummond, com o emblemático "No meio do caminho tinha uma pedra".',                              capa_url:capaUrl('9788535916324') },
+    ]);
+
+    /* ─────────────────────────── EXEMPLARES ──────────────────────── */
+    await trx('exemplares').insert([
+      { id_livro:1,  num_tombo:'T-001', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(700) },
+      { id_livro:1,  num_tombo:'T-002', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(600) },
+      { id_livro:1,  num_tombo:'T-003', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(400) },
+      { id_livro:2,  num_tombo:'T-004', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(650) },
+      { id_livro:2,  num_tombo:'T-005', condicao:'Ruim',   disponivel:1, data_aquisicao:daysAgo(800) },
+      { id_livro:3,  num_tombo:'T-006', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(500) },
+      { id_livro:3,  num_tombo:'T-007', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(500) },
+      { id_livro:4,  num_tombo:'T-008', condicao:'Novo',   disponivel:1, data_aquisicao:daysAgo(90)  },
+      { id_livro:4,  num_tombo:'T-009', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(300) },
+      { id_livro:5,  num_tombo:'T-010', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(400) },
+      { id_livro:5,  num_tombo:'T-011', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(700) },
+      { id_livro:6,  num_tombo:'T-012', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(350) },
+      { id_livro:6,  num_tombo:'T-013', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(350) },
+      { id_livro:7,  num_tombo:'T-014', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(500) },
+      { id_livro:7,  num_tombo:'T-015', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(500) },
+      { id_livro:7,  num_tombo:'T-016', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(700) },
+      { id_livro:8,  num_tombo:'T-017', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(450) },
+      { id_livro:8,  num_tombo:'T-018', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(450) },
+      { id_livro:9,  num_tombo:'T-019', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(300) },
+      { id_livro:9,  num_tombo:'T-020', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(550) },
+      { id_livro:10, num_tombo:'T-021', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(600) },
+      { id_livro:10, num_tombo:'T-022', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(600) },
+      { id_livro:10, num_tombo:'T-023', condicao:'Novo',   disponivel:1, data_aquisicao:daysAgo(60)  },
+      { id_livro:11, num_tombo:'T-024', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(500) },
+      { id_livro:11, num_tombo:'T-025', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(700) },
+      { id_livro:12, num_tombo:'T-026', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(400) },
+      { id_livro:12, num_tombo:'T-027', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(400) },
+      { id_livro:13, num_tombo:'T-028', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(350) },
+      { id_livro:13, num_tombo:'T-029', condicao:'Novo',   disponivel:1, data_aquisicao:daysAgo(50)  },
+      { id_livro:14, num_tombo:'T-030', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(550) },
+      { id_livro:14, num_tombo:'T-031', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(550) },
+      { id_livro:14, num_tombo:'T-032', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(750) },
+      { id_livro:15, num_tombo:'T-033', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(400) },
+      { id_livro:15, num_tombo:'T-034', condicao:'Novo',   disponivel:1, data_aquisicao:daysAgo(70)  },
+      { id_livro:16, num_tombo:'T-035', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(300) },
+      { id_livro:16, num_tombo:'T-036', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(300) },
+      { id_livro:16, num_tombo:'T-037', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(500) },
+      { id_livro:17, num_tombo:'T-038', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(300) },
+      { id_livro:17, num_tombo:'T-039', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(300) },
+      { id_livro:18, num_tombo:'T-040', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(300) },
+      { id_livro:18, num_tombo:'T-041', condicao:'Novo',   disponivel:1, data_aquisicao:daysAgo(45)  },
+      { id_livro:19, num_tombo:'T-042', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(450) },
+      { id_livro:19, num_tombo:'T-043', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(450) },
+      { id_livro:19, num_tombo:'T-044', condicao:'Ruim',   disponivel:1, data_aquisicao:daysAgo(900) },
+      { id_livro:20, num_tombo:'T-045', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(400) },
+      { id_livro:20, num_tombo:'T-046', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(600) },
+      { id_livro:21, num_tombo:'T-047', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(500) },
+      { id_livro:21, num_tombo:'T-048', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(500) },
+      { id_livro:22, num_tombo:'T-049', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(400) },
+      { id_livro:22, num_tombo:'T-050', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(650) },
+      { id_livro:23, num_tombo:'T-051', condicao:'Novo',   disponivel:1, data_aquisicao:daysAgo(80)  },
+      { id_livro:23, num_tombo:'T-052', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(250) },
+      { id_livro:23, num_tombo:'T-053', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(250) },
+      { id_livro:24, num_tombo:'T-054', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(350) },
+      { id_livro:24, num_tombo:'T-055', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(350) },
+      { id_livro:25, num_tombo:'T-056', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(400) },
+      { id_livro:25, num_tombo:'T-057', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(600) },
+      { id_livro:26, num_tombo:'T-058', condicao:'Novo',   disponivel:1, data_aquisicao:daysAgo(60)  },
+      { id_livro:26, num_tombo:'T-059', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(300) },
+      { id_livro:26, num_tombo:'T-060', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(300) },
+      { id_livro:27, num_tombo:'T-061', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(380) },
+      { id_livro:27, num_tombo:'T-062', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(700) },
+      { id_livro:28, num_tombo:'T-063', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(300) },
+      { id_livro:28, num_tombo:'T-064', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(300) },
+      { id_livro:29, num_tombo:'T-065', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(350) },
+      { id_livro:29, num_tombo:'T-066', condicao:'Novo',   disponivel:1, data_aquisicao:daysAgo(55)  },
+      { id_livro:30, num_tombo:'T-067', condicao:'Bom',    disponivel:1, data_aquisicao:daysAgo(500) },
+      { id_livro:30, num_tombo:'T-068', condicao:'Regular',disponivel:1, data_aquisicao:daysAgo(700) },
+    ]);
+
+    /* ─────────────────────────── MEMBROS ─────────────────────────── */
+    await trx('membros').insert([
+      { nome:'Ana Silva',           cpf:'111.111.111-01', email:'ana.silva@email.com',        telefone:'(11) 9 1111-0001', endereco:'Rua das Flores, 10 — São Paulo/SP',      tipo:'Estudante', data_validade:daysFromNow(300), observacoes:null },
+      { nome:'Bruno Souza',         cpf:'222.222.222-02', email:'bruno.souza@email.com',      telefone:'(11) 9 2222-0002', endereco:'Av. Paulista, 200 — São Paulo/SP',        tipo:'Professor', data_validade:daysFromNow(365), observacoes:null },
+      { nome:'Carla Mendes',        cpf:'333.333.333-03', email:'carla.mendes@email.com',     telefone:'(11) 9 3333-0003', endereco:'Rua Augusta, 30 — São Paulo/SP',          tipo:'Comum',     data_validade:daysFromNow(200), observacoes:'Possui pendências de multa.' },
+      { nome:'Daniel Ferreira',     cpf:'444.444.444-04', email:'daniel.f@email.com',         telefone:'(21) 9 4444-0004', endereco:'Rua Ipanema, 50 — Rio de Janeiro/RJ',     tipo:'Estudante', data_validade:daysFromNow(280), observacoes:null },
+      { nome:'Elisa Costa',         cpf:'555.555.555-05', email:'elisa.costa@email.com',      telefone:'(21) 9 5555-0005', endereco:'Av. Brasil, 100 — Rio de Janeiro/RJ',     tipo:'Professor', data_validade:daysFromNow(365), observacoes:null },
+      { nome:'Felipe Lima',         cpf:'666.666.666-06', email:'felipe.lima@email.com',      telefone:'(31) 9 6666-0006', endereco:'Rua Liberdade, 15 — Belo Horizonte/MG',   tipo:'Comum',     data_validade:daysFromNow(150), observacoes:null },
+      { nome:'Gabriela Rocha',      cpf:'777.777.777-07', email:'gabi.rocha@email.com',       telefone:'(31) 9 7777-0007', endereco:'Av. Contorno, 80 — Belo Horizonte/MG',    tipo:'Estudante', data_validade:daysFromNow(320), observacoes:'Bolsista universitária.' },
+      { nome:'Henrique Alves',      cpf:'888.888.888-08', email:'henrique.a@email.com',       telefone:'(85) 9 8888-0008', endereco:'Rua do Sol, 5 — Fortaleza/CE',            tipo:'Comum',     data_validade:daysFromNow(180), observacoes:null },
+      { nome:'Isabela Santos',      cpf:'999.999.999-09', email:'isabela.s@email.com',        telefone:'(85) 9 9999-0009', endereco:'Av. Meireles, 60 — Fortaleza/CE',         tipo:'Estudante', data_validade:daysFromNow(310), observacoes:null },
+      { nome:'João Pereira',        cpf:'101.010.101-10', email:'joao.pereira@email.com',     telefone:'(51) 9 1010-1010', endereco:'Av. Ipiranga, 300 — Porto Alegre/RS',     tipo:'Professor', data_validade:daysFromNow(365), observacoes:null },
+      { nome:'Larissa Oliveira',    cpf:'121.212.121-11', email:'larissa.o@email.com',        telefone:'(51) 9 1212-1212', endereco:'Rua Voluntários, 45 — Porto Alegre/RS',   tipo:'Estudante', data_validade:daysFromNow(290), observacoes:null },
+      { nome:'Marcos Vieira',       cpf:'131.313.131-12', email:'marcos.v@email.com',         telefone:'(41) 9 1313-1313', endereco:'Rua XV de Novembro, 100 — Curitiba/PR',   tipo:'Comum',     data_validade:daysFromNow(120), observacoes:null },
+      { nome:'Natália Ribeiro',     cpf:'141.414.141-13', email:'natalia.r@email.com',        telefone:'(41) 9 1414-1414', endereco:'Av. Batel, 25 — Curitiba/PR',             tipo:'Estudante', data_validade:daysFromNow(340), observacoes:null },
+      { nome:'Otávio Carvalho',     cpf:'151.515.151-14', email:'otavio.c@email.com',         telefone:'(71) 9 1515-1515', endereco:'Av. Oceânica, 80 — Salvador/BA',          tipo:'Professor', data_validade:daysFromNow(365), observacoes:null },
+      { nome:'Patrícia Gomes',      cpf:'161.616.161-15', email:'patricia.g@email.com',       telefone:'(71) 9 1616-1616', endereco:'Barra, Rua 2 — Salvador/BA',              tipo:'Comum',     data_validade:daysFromNow(200), observacoes:null },
+      { nome:'Rafael Nascimento',   cpf:'171.717.171-16', email:'rafael.n@email.com',         telefone:'(92) 9 1717-1717', endereco:'Av. Eduardo Ribeiro, 10 — Manaus/AM',     tipo:'Estudante', data_validade:daysFromNow(260), observacoes:null },
+      { nome:'Simone Martins',      cpf:'181.818.181-17', email:'simone.m@email.com',         telefone:'(92) 9 1818-1818', endereco:"Rua Lobo d'Almada, 5 — Manaus/AM",        tipo:'Professor', data_validade:daysFromNow(365), observacoes:null },
+      { nome:'Thiago Barbosa',      cpf:'191.919.191-18', email:'thiago.b@email.com',         telefone:'(62) 9 1919-1919', endereco:'Av. Goiás, 200 — Goiânia/GO',             tipo:'Comum',     data_validade:daysFromNow(100), observacoes:null },
+      { nome:'Vanessa Correia',     cpf:'202.020.202-19', email:'vanessa.c@email.com',        telefone:'(62) 9 2020-2020', endereco:'Rua 68, 100 — Goiânia/GO',               tipo:'Estudante', data_validade:daysFromNow(270), observacoes:null },
+      { nome:'Wellington Pinto',    cpf:'212.121.212-20', email:'wellington.p@email.com',     telefone:'(98) 9 2121-2121', endereco:'Av. dos Holandeses, 50 — São Luís/MA',    tipo:'Comum',     data_validade:daysFromNow(90),  observacoes:null },
+      { nome:'Administrador',       cpf:'101.010.101-01', email:'admin@bibliotecabrasil.local', telefone:'', endereco:'', tipo:'Professor', data_validade:daysFromNow(3650), senha_hash:adminHash, perfil:'admin' },
+    ]);
+
+    /* ─────────────────────────── EMPRÉSTIMOS ─────────────────────── */
+    await trx('emprestimos').insert([
+      // Ativos
+      { id_exemplar:1,  id_membro:1,  data_emprestimo:daysAgo(3),  data_prevista_devolucao:daysFromNow(4),  data_devolucao:null, num_renovacoes:0, status:'Ativo' },
+      { id_exemplar:8,  id_membro:2,  data_emprestimo:daysAgo(5),  data_prevista_devolucao:daysFromNow(9),  data_devolucao:null, num_renovacoes:0, status:'Ativo' },
+      { id_exemplar:35, id_membro:4,  data_emprestimo:daysAgo(2),  data_prevista_devolucao:daysFromNow(5),  data_devolucao:null, num_renovacoes:0, status:'Ativo' },
+      { id_exemplar:42, id_membro:6,  data_emprestimo:daysAgo(1),  data_prevista_devolucao:daysFromNow(6),  data_devolucao:null, num_renovacoes:0, status:'Ativo' },
+      { id_exemplar:14, id_membro:9,  data_emprestimo:daysAgo(4),  data_prevista_devolucao:daysFromNow(3),  data_devolucao:null, num_renovacoes:0, status:'Ativo' },
+      // Atrasados
+      { id_exemplar:26, id_membro:3,  data_emprestimo:daysAgo(20), data_prevista_devolucao:daysAgo(13), data_devolucao:null, num_renovacoes:0, status:'Atrasado' },
+      { id_exemplar:17, id_membro:7,  data_emprestimo:daysAgo(15), data_prevista_devolucao:daysAgo(8),  data_devolucao:null, num_renovacoes:0, status:'Atrasado' },
+      { id_exemplar:30, id_membro:10, data_emprestimo:daysAgo(25), data_prevista_devolucao:daysAgo(11), data_devolucao:null, num_renovacoes:1, status:'Atrasado' },
+      // Devolvidos
+      { id_exemplar:51, id_membro:1,  data_emprestimo:daysAgo(30), data_prevista_devolucao:daysAgo(23), data_devolucao:daysAgo(25), num_renovacoes:0, status:'Devolvido' },
+      { id_exemplar:47, id_membro:2,  data_emprestimo:daysAgo(45), data_prevista_devolucao:daysAgo(31), data_devolucao:daysAgo(33), num_renovacoes:0, status:'Devolvido' },
+      { id_exemplar:38, id_membro:5,  data_emprestimo:daysAgo(20), data_prevista_devolucao:daysAgo(6),  data_devolucao:daysAgo(8),  num_renovacoes:0, status:'Devolvido' },
+      { id_exemplar:58, id_membro:11, data_emprestimo:daysAgo(25), data_prevista_devolucao:daysAgo(18), data_devolucao:daysAgo(20), num_renovacoes:0, status:'Devolvido' },
+      { id_exemplar:63, id_membro:12, data_emprestimo:daysAgo(35), data_prevista_devolucao:daysAgo(28), data_devolucao:daysAgo(30), num_renovacoes:0, status:'Devolvido' },
+      { id_exemplar:45, id_membro:13, data_emprestimo:daysAgo(40), data_prevista_devolucao:daysAgo(33), data_devolucao:daysAgo(32), num_renovacoes:0, status:'Devolvido' },
+      { id_exemplar:54, id_membro:8,  data_emprestimo:daysAgo(50), data_prevista_devolucao:daysAgo(43), data_devolucao:daysAgo(45), num_renovacoes:0, status:'Devolvido' },
+      { id_exemplar:56, id_membro:14, data_emprestimo:daysAgo(60), data_prevista_devolucao:daysAgo(46), data_devolucao:daysAgo(48), num_renovacoes:1, status:'Devolvido' },
+    ]);
+
+    // Marcar exemplares dos empréstimos ativos/atrasados como indisponíveis
+    await trx('exemplares').whereIn('id', [1, 8, 35, 42, 14, 26, 17, 30]).update({ disponivel: 0 });
+
+    // Para o demo de reservas, marcar alguns exemplares adicionais como indisponíveis
+    await trx('exemplares').whereIn('num_tombo', ['T-027','T-002','T-003','T-017','T-018']).update({ disponivel: 0 });
+
+    /* ──────────────────────────── RESERVAS ───────────────────────── */
+    await trx('reservas').insert([
+      { id_livro:1,  id_membro:15, data_reserva:hoursAgo(12),  data_expiracao:daysFromNow(2), status:'Ativa' },
+      { id_livro:12, id_membro:16, data_reserva:hoursAgo(6),   data_expiracao:daysFromNow(1), status:'Ativa' },
+      { id_livro:8,  id_membro:17, data_reserva:hoursAgo(2),   data_expiracao:daysFromNow(3), status:'Ativa' },
+      { id_livro:4,  id_membro:18, data_reserva:hoursAgo(18),  data_expiracao:daysFromNow(2), status:'Ativa' },
+      { id_livro:2,  id_membro:19, data_reserva:hoursAgo(120), data_expiracao:daysAgo(2),     status:'Expirada' },
+      { id_livro:16, id_membro:20, data_reserva:hoursAgo(200), data_expiracao:daysAgo(5),     status:'Cancelada' },
+    ]);
+
+    /* ──────────────────────────── MULTAS ─────────────────────────── */
+    await trx('multas').insert([
+      { id_emprestimo:6,  id_membro:3,  valor:6.50, motivo:'Devolução em atraso — 13 dia(s)', data_geracao:today(), data_pagamento:null,      pago:0 },
+      { id_emprestimo:7,  id_membro:7,  valor:4.00, motivo:'Devolução em atraso — 8 dia(s)',  data_geracao:today(), data_pagamento:null,      pago:0 },
+      { id_emprestimo:8,  id_membro:10, valor:5.50, motivo:'Devolução em atraso — 11 dia(s)', data_geracao:today(), data_pagamento:null,      pago:0 },
+      { id_emprestimo:10, id_membro:2,  valor:1.00, motivo:'Devolução em atraso — 2 dia(s)',  data_geracao:daysAgo(33), data_pagamento:daysAgo(33), pago:1 },
+      { id_emprestimo:12, id_membro:11, valor:1.00, motivo:'Devolução em atraso — 2 dia(s)',  data_geracao:daysAgo(20), data_pagamento:daysAgo(19), pago:1 },
+      { id_emprestimo:13, id_membro:12, valor:1.00, motivo:'Devolução em atraso — 2 dia(s)',  data_geracao:daysAgo(30), data_pagamento:daysAgo(29), pago:1 },
+      { id_emprestimo:16, id_membro:14, valor:1.00, motivo:'Devolução em atraso — 2 dia(s)',  data_geracao:daysAgo(48), data_pagamento:daysAgo(47), pago:1 },
+    ]);
+  });
+
+  console.log('🌱 Seed rico executado com sucesso!');
+  console.log('   📚 30 livros | 68 exemplares | 17 autores | 8 editoras | 12 categorias');
+  console.log('   👥 21 membros (+ admin) | 16 empréstimos | 6 reservas | 7 multas');
+  console.log('   🔑 Admin portal — CPF: 101.010.101-01 | Senha: administrador123');
+}
+
+module.exports = { runSeedRich };
+
+// Executar diretamente: node src/database/seedRich.js
+if (require.main === module) {
+  runSeedRich().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); });
+}
+const bcrypt            = require('bcryptjs');
+const { runMigrations } = require('./migrations');
 const { getDb }         = require('./index');
 
 function daysAgo(n)     { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0]; }

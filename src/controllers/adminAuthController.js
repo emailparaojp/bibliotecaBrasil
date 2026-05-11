@@ -5,6 +5,8 @@ const jwt    = require('jsonwebtoken');
 const { getDb } = require('../database');
 const { validarCPF, limparCPF } = require('../utils/cpf');
 
+function row(r) { const rows = Array.isArray(r) ? r : (r.rows || []); return rows[0] ?? null; }
+
 const PERFIS_ADMIN = ['admin', 'bibliotecario'];
 
 const adminAuthController = {
@@ -22,8 +24,8 @@ const adminAuthController = {
     }
     const cpfFmt = cpfLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 
-    const db = getDb();
-    const membro = db.prepare('SELECT * FROM membros WHERE cpf = ?').get(cpfFmt);
+    const knex = getDb();
+    const membro = row(await knex.raw('SELECT * FROM membros WHERE cpf = ?', [cpfFmt]));
 
     if (!membro || !membro.senha_hash || !membro.ativo) {
       return res.status(401).json({ erro: 'CPF ou senha incorretos.' });

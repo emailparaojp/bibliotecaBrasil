@@ -2,66 +2,72 @@
 
 const { getDb } = require('../database');
 
+function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
+function row(r)  { return rows(r)[0] ?? null; }
+
 const categoriasController = {
-  listar(req, res) {
-    const db = getDb();
-    const rows = db.prepare(`
+  async listar(req, res) {
+    const knex = getDb();
+    const result = await knex.raw(`
       SELECT c.*, COUNT(l.id) as total_livros
       FROM categorias c
       LEFT JOIN livros l ON l.id_categoria = c.id
       GROUP BY c.id ORDER BY c.nome
-    `).all();
-    res.json(rows);
+    `);
+    res.json(rows(result));
   },
 
-  buscarPorId(req, res) {
-    const db = getDb();
-    const cat = db.prepare('SELECT * FROM categorias WHERE id = ?').get(req.params.id);
+  async buscarPorId(req, res) {
+    const knex = getDb();
+    const cat = row(await knex.raw('SELECT * FROM categorias WHERE id = ?', [req.params.id]));
     if (!cat) return res.status(404).json({ erro: 'Categoria não encontrada.' });
-    const livros = db.prepare(`
+    const livros = rows(await knex.raw(`
       SELECT l.id, l.titulo, l.isbn, a.nome as autor, l.ano_publicacao
       FROM livros l
       LEFT JOIN autores a ON a.id = l.id_autor
       WHERE l.id_categoria = ?
       ORDER BY l.titulo
-    `).all(cat.id);
+    `, [cat.id]));
     res.json({ ...cat, livros });
   },
 
-  criar(req, res) {
-    const db = getDb();
+  async criar(req, res) {
+    const knex = getDb();
     const { nome, descricao } = req.body;
     try {
-      const result = db.prepare('INSERT INTO categorias (nome, descricao) VALUES (?, ?)').run(nome, descricao || null);
-      res.status(201).json({ id: result.lastInsertRowid, nome, descricao });
+      const result = await knex('categorias').insert({ nome, descricao: descricao || null }).returning('id');
+      const id = typeof result[0] === 'object' ? result[0].id : result[0];
+      res.status(201).json({ id, nome, descricao });
     } catch (e) {
-      if (e.message.includes('UNIQUE')) return res.status(409).json({ erro: 'Categoria já cadastrada.' });
+      if (e.message.includes('UNIQUE') || e.message.includes('unique')) return res.status(409).json({ erro: 'Categoria já cadastrada.' });
       throw e;
     }
   },
 
-  atualizar(req, res) {
-    const db = getDb();
+  async atualizar(req, res) {
+    const knex = getDb();
     const { nome, descricao } = req.body;
-    const atual = db.prepare('SELECT * FROM categorias WHERE id = ?').get(req.params.id);
+    const atual = row(await knex.raw('SELECT * FROM categorias WHERE id = ?', [req.params.id]));
     if (!atual) return res.status(404).json({ erro: 'Categoria não encontrada.' });
     try {
-      db.prepare('UPDATE categorias SET nome = ?, descricao = ? WHERE id = ?')
-        .run(nome ?? atual.nome, descricao ?? atual.descricao, req.params.id);
+      await knex('categorias').where({ id: req.params.id }).update({
+        nome:     nome     ?? atual.nome,
+        descricao: descricao ?? atual.descricao,
+      });
       res.json({ mensagem: 'Categoria atualizada com sucesso.' });
     } catch (e) {
-      if (e.message.includes('UNIQUE')) return res.status(409).json({ erro: 'Já existe uma categoria com esse nome.' });
+      if (e.message.includes('UNIQUE') || e.message.includes('unique')) return res.status(409).json({ erro: 'Já existe uma categoria com esse nome.' });
       throw e;
     }
   },
 
-  remover(req, res) {
-    const db = getDb();
-    const cat = db.prepare('SELECT * FROM categorias WHERE id = ?').get(req.params.id);
+  async remover(req, res) {
+    const knex = getDb();
+    const cat = row(await knex.raw('SELECT * FROM categorias WHERE id = ?', [req.params.id]));
     if (!cat) return res.status(404).json({ erro: 'Categoria não encontrada.' });
-    const livros = db.prepare('SELECT COUNT(*) as c FROM livros WHERE id_categoria = ?').get(req.params.id);
-    if (livros.c > 0) return res.status(409).json({ erro: 'Não é possível remover: categoria possui livros cadastrados.' });
-    db.prepare('DELETE FROM categorias WHERE id = ?').run(req.params.id);
+    const { c } = await knex('livros').where({ id_categoria: req.params.id }).count('id as c').first();
+    if (Number(c) > 0) return res.status(409).json({ erro: 'Não é possível remover: categoria possui livros cadastrados.' });
+    await knex('categorias').where({ id: req.params.id }).delete();
     res.json({ mensagem: 'Categoria removida com sucesso.' });
   },
 };

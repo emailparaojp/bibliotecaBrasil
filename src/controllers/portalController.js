@@ -2,11 +2,14 @@
 
 const { getDb } = require('../database');
 
+function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
+function row(r)  { return rows(r)[0] ?? null; }
+
 const portalController = {
 
   /* GET /api/portal/livros?q=&categoria=&autor=&disponivel= */
-  searchLivros(req, res) {
-    const db = getDb();
+  async searchLivros(req, res) {
+    const knex = getDb();
     const { q = '', categoria, autor, disponivel, page = 1, limit = 12 } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
 
@@ -26,7 +29,6 @@ const portalController = {
       params.push(autor);
     }
 
-    // Base joins (without exemplares — used for COUNT)
     const joins = `
       FROM livros l
       LEFT JOIN autores a ON l.id_autor = a.id
@@ -34,10 +36,9 @@ const portalController = {
       LEFT JOIN categorias c ON l.id_categoria = c.id
     `;
 
-    const countRow = db.prepare(`SELECT COUNT(*) as total ${joins} ${where}`).get(...params);
-    const total = countRow.total;
+    const countRow = row(await knex.raw(`SELECT COUNT(*) as total ${joins} ${where}`, params));
+    const total = Number(countRow.total);
 
-    // Main query with exemplares join for availability
     let sql = `
       SELECT l.id, l.titulo, l.isbn, l.ano_publicacao,
              (CASE WHEN l.capa_base64 IS NOT NULL OR l.capa_url IS NOT NULL THEN 1 ELSE 0 END) AS tem_capa,
@@ -56,9 +57,8 @@ const portalController = {
 
     sql += ` ORDER BY l.titulo LIMIT ? OFFSET ?`;
 
-    const livros = db.prepare(sql).all(...params, Number(limit), offset);
+    const livros = rows(await knex.raw(sql, [...params, Number(limit), offset]));
 
-    // Add capa_url pointing to the serve endpoint
     const data = livros.map(l => ({
       ...l,
       capa_url: l.tem_capa ? `/api/portal/livros/${l.id}/capa` : null,
@@ -73,9 +73,9 @@ const portalController = {
   },
 
   /* GET /api/portal/livros/:id */
-  getLivro(req, res) {
-    const db = getDb();
-    const livro = db.prepare(`
+  async getLivro(req, res) {
+    const knex = getDb();
+    const livro = row(await knex.raw(`
       SELECT l.id, l.isbn, l.titulo, l.subtitulo, l.ano_publicacao, l.edicao,
              l.num_paginas, l.idioma, l.localizacao, l.descricao,
              l.capa_url, l.capa_mime,
@@ -88,15 +88,15 @@ const portalController = {
       LEFT JOIN editoras e ON l.id_editora = e.id
       LEFT JOIN categorias c ON l.id_categoria = c.id
       WHERE l.id = ?
-    `).get(req.params.id);
+    `, [req.params.id]));
 
     if (!livro) return res.status(404).json({ erro: 'Livro não encontrado.' });
 
-    const exemplares = db.prepare(`
-      SELECT id, num_tombo AS codigo, disponivel, condicao FROM exemplares WHERE id_livro = ?
-    `).all(req.params.id);
+    const exemplares = rows(await knex.raw(
+      `SELECT id, num_tombo AS codigo, disponivel, condicao FROM exemplares WHERE id_livro = ?`,
+      [req.params.id]
+    ));
 
-    // Enrich with human-readable status
     const exemplaresComStatus = exemplares.map(ex => ({
       ...ex,
       status: ex.disponivel ? 'Disponível' : 'Indisponível',
@@ -108,96 +108,87 @@ const portalController = {
   },
 
   /* GET /api/portal/categorias */
-  getCategorias(req, res) {
-    const db = getDb();
-    const cats = db.prepare('SELECT id, nome FROM categorias ORDER BY nome').all();
+  async getCategorias(req, res) {
+    const knex = getDb();
+    const cats = rows(await knex.raw('SELECT id, nome FROM categorias ORDER BY nome'));
     res.json(cats);
   },
 
   /* GET /api/portal/autores */
-  getAutores(req, res) {
-    const db = getDb();
-    const autores = db.prepare('SELECT id, nome FROM autores ORDER BY nome').all();
+  async getAutores(req, res) {
+    const knex = getDb();
+    const autores = rows(await knex.raw('SELECT id, nome FROM autores ORDER BY nome'));
     res.json(autores);
   },
 
   /* POST /api/portal/reservas  (requer authMembro) */
-  criarReserva(req, res, next) {
-    try {
-      const db = getDb();
-      const idMembro = req.membro.id;
-      const idLivro  = req.body.id_livro;
+  async criarReserva(req, res) {
+    const knex = getDb();
+    const idMembro = req.membro.id;
+    const idLivro  = req.body.id_livro;
 
-      if (!idLivro) return res.status(422).json({ erro: 'id_livro é obrigatório.' });
+    if (!idLivro) return res.status(422).json({ erro: 'id_livro é obrigatório.' });
 
-      // Verificar membro ativo
-      const membro = db.prepare('SELECT id, ativo, data_validade FROM membros WHERE id = ?').get(idMembro);
-      if (!membro || !membro.ativo) {
-        return res.status(403).json({ erro: 'Cadastro de membro inativo.' });
-      }
-      if (membro.data_validade < new Date().toISOString().split('T')[0]) {
-        return res.status(403).json({ erro: 'Cadastro de membro vencido. Renove na biblioteca.' });
-      }
-
-      // Verificar livro
-      const livro = db.prepare('SELECT id, titulo FROM livros WHERE id = ?').get(idLivro);
-      if (!livro) return res.status(404).json({ erro: 'Livro não encontrado.' });
-
-      // Verificar reserva duplicada ativa
-      const dup = db.prepare(`
-        SELECT id FROM reservas WHERE id_membro = ? AND id_livro = ? AND status = 'Ativa'
-      `).get(idMembro, idLivro);
-      if (dup) return res.status(409).json({ erro: 'Você já tem uma reserva ativa para este livro.' });
-
-      // Criar reserva
-      const expiracao = new Date();
-      expiracao.setDate(expiracao.getDate() + Number(process.env.DIAS_RESERVA || 3));
-
-      const result = db.prepare(`
-        INSERT INTO reservas (id_membro, id_livro, data_expiracao)
-        VALUES (?, ?, ?)
-      `).run(idMembro, idLivro, expiracao.toISOString().split('T')[0]);
-
-      res.status(201).json({
-        mensagem: `Reserva criada para "${livro.titulo}". Válida até ${expiracao.toISOString().split('T')[0]}.`,
-        id: result.lastInsertRowid,
-      });
-    } catch (err) {
-      next(err);
+    const membro = row(await knex.raw('SELECT id, ativo, data_validade FROM membros WHERE id = ?', [idMembro]));
+    if (!membro || !membro.ativo) {
+      return res.status(403).json({ erro: 'Cadastro de membro inativo.' });
     }
+    if (membro.data_validade < new Date().toISOString().split('T')[0]) {
+      return res.status(403).json({ erro: 'Cadastro de membro vencido. Renove na biblioteca.' });
+    }
+
+    const livro = row(await knex.raw('SELECT id, titulo FROM livros WHERE id = ?', [idLivro]));
+    if (!livro) return res.status(404).json({ erro: 'Livro não encontrado.' });
+
+    const dup = row(await knex.raw(`
+      SELECT id FROM reservas WHERE id_membro = ? AND id_livro = ? AND status = 'Ativa'
+    `, [idMembro, idLivro]));
+    if (dup) return res.status(409).json({ erro: 'Você já tem uma reserva ativa para este livro.' });
+
+    const expiracao = new Date();
+    expiracao.setDate(expiracao.getDate() + Number(process.env.DIAS_RESERVA || 3));
+    const dataExpiracao = expiracao.toISOString().split('T')[0];
+
+    const result = await knex('reservas').insert({ id_membro: idMembro, id_livro: idLivro, data_expiracao: dataExpiracao }).returning('id');
+    const id = typeof result[0] === 'object' ? result[0].id : result[0];
+
+    res.status(201).json({
+      mensagem: `Reserva criada para "${livro.titulo}". Válida até ${dataExpiracao}.`,
+      id,
+    });
   },
 
   /* GET /api/portal/minhas-reservas  (requer authMembro) */
-  minhasReservas(req, res) {
-    const db = getDb();
-    const reservas = db.prepare(`
+  async minhasReservas(req, res) {
+    const knex = getDb();
+    const reservas = rows(await knex.raw(`
       SELECT r.*, l.titulo, l.capa_url
       FROM reservas r
       JOIN livros l ON l.id = r.id_livro
       WHERE r.id_membro = ?
       ORDER BY r.data_reserva DESC
-    `).all(req.membro.id);
+    `, [req.membro.id]));
     res.json(reservas);
   },
 
   /* GET /api/portal/meu-historico  (requer authMembro) */
-  meuHistorico(req, res) {
-    const db = getDb();
-    const emprestimos = db.prepare(`
+  async meuHistorico(req, res) {
+    const knex = getDb();
+    const emprestimos = rows(await knex.raw(`
       SELECT e.*, l.titulo, l.capa_url, ex.num_tombo AS exemplar_codigo
       FROM emprestimos e
       JOIN exemplares ex ON ex.id = e.id_exemplar
       JOIN livros l ON l.id = ex.id_livro
       WHERE e.id_membro = ?
       ORDER BY e.data_emprestimo DESC
-    `).all(req.membro.id);
+    `, [req.membro.id]));
     res.json(emprestimos);
   },
 
   /* GET /api/portal/minhas-multas  (requer authMembro) */
-  minhasMultas(req, res) {
-    const db = getDb();
-    const multas = db.prepare(`
+  async minhasMultas(req, res) {
+    const knex = getDb();
+    const multas = rows(await knex.raw(`
       SELECT m.*, l.titulo, l.capa_url
       FROM multas m
       LEFT JOIN emprestimos e ON e.id = m.id_emprestimo
@@ -205,19 +196,19 @@ const portalController = {
       LEFT JOIN livros l ON l.id = ex.id_livro
       WHERE m.id_membro = ?
       ORDER BY m.created_at DESC
-    `).all(req.membro.id);
+    `, [req.membro.id]));
     res.json(multas);
   },
 
   /* DELETE /api/portal/reservas/:id  (requer authMembro) */
-  cancelarReserva(req, res) {
-    const db = getDb();
-    const reserva = db.prepare('SELECT * FROM reservas WHERE id = ?').get(req.params.id);
+  async cancelarReserva(req, res) {
+    const knex = getDb();
+    const reserva = row(await knex.raw('SELECT * FROM reservas WHERE id = ?', [req.params.id]));
     if (!reserva) return res.status(404).json({ erro: 'Reserva não encontrada.' });
     if (reserva.id_membro !== req.membro.id) return res.status(403).json({ erro: 'Acesso negado.' });
     if (reserva.status !== 'Ativa') return res.status(422).json({ erro: 'Reserva não está ativa.' });
 
-    db.prepare(`UPDATE reservas SET status = 'Cancelada' WHERE id = ?`).run(req.params.id);
+    await knex('reservas').where({ id: req.params.id }).update({ status: 'Cancelada' });
     res.json({ mensagem: 'Reserva cancelada.' });
   },
 };

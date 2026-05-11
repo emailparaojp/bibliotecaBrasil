@@ -2,9 +2,12 @@
 
 const { getDb } = require('../database');
 
+function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
+function row(r)  { return rows(r)[0] ?? null; }
+
 const livrosController = {
-  listar(req, res) {
-    const db = getDb();
+  async listar(req, res) {
+    const knex = getDb();
     const { busca, autor, categoria, editora, idioma, ano, disponivel, page = 1, limit = 20 } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
 
@@ -27,16 +30,16 @@ const livrosController = {
 
     const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-    const totalRow = db.prepare(`
+    const totalRow = row(await knex.raw(`
       SELECT COUNT(DISTINCT l.id) as total
       FROM livros l
       LEFT JOIN autores a  ON a.id  = l.id_autor
       LEFT JOIN categorias c ON c.id = l.id_categoria
       LEFT JOIN editoras ed  ON ed.id = l.id_editora
       ${whereClause}
-    `).get(...params);
+    `, params));
 
-    const livros = db.prepare(`
+    const livros = rows(await knex.raw(`
       SELECT l.id, l.isbn, l.titulo, l.subtitulo, l.ano_publicacao, l.edicao,
              l.num_paginas, l.idioma, l.localizacao, l.descricao, l.capa_url,
              (CASE WHEN l.capa_base64 IS NOT NULL OR l.capa_url IS NOT NULL THEN 1 ELSE 0 END) AS tem_capa,
@@ -55,7 +58,7 @@ const livrosController = {
       ${havingDisp}
       ORDER BY l.titulo
       LIMIT ? OFFSET ?
-    `).all(...params, Number(limit), offset);
+    `, [...params, Number(limit), offset]));
 
     res.json({
       total: totalRow.total,
@@ -65,9 +68,9 @@ const livrosController = {
     });
   },
 
-  buscarPorId(req, res) {
-    const db = getDb();
-    const livro = db.prepare(`
+  async buscarPorId(req, res) {
+    const knex = getDb();
+    const livro = row(await knex.raw(`
       SELECT l.*,
              a.id as autor_id, a.nome as autor_nome, a.nacionalidade as autor_nacionalidade,
              ed.id as editora_id, ed.nome as editora_nome,
@@ -77,67 +80,77 @@ const livrosController = {
       LEFT JOIN editoras ed ON ed.id = l.id_editora
       LEFT JOIN categorias c ON c.id = l.id_categoria
       WHERE l.id = ?
-    `).get(req.params.id);
+    `, [req.params.id]));
     if (!livro) return res.status(404).json({ erro: 'Livro não encontrado.' });
 
-    const exemplares = db.prepare(`
+    const exemplares = rows(await knex.raw(`
       SELECT e.id, e.num_tombo, e.condicao, e.disponivel, e.data_aquisicao
       FROM exemplares e
       WHERE e.id_livro = ?
       ORDER BY e.num_tombo
-    `).all(livro.id);
+    `, [livro.id]));
 
     res.json({ ...livro, exemplares });
   },
 
-  criar(req, res) {
-    const db = getDb();
+  async criar(req, res) {
+    const knex = getDb();
     const { isbn, titulo, subtitulo, id_autor, id_editora, id_categoria,
             ano_publicacao, edicao, num_paginas, idioma, localizacao, descricao,
             capa_url, capa_base64, capa_mime } = req.body;
 
     try {
-      const result = db.prepare(`
-        INSERT INTO livros (isbn, titulo, subtitulo, id_autor, id_editora, id_categoria,
-          ano_publicacao, edicao, num_paginas, idioma, localizacao, descricao, capa_url,
-          capa_mime, capa_base64)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(isbn || null, titulo, subtitulo || null, id_autor || null, id_editora || null,
-             id_categoria || null, ano_publicacao || null, edicao || null, num_paginas || null,
-             idioma || 'Português', localizacao || null, descricao || null, capa_url || null,
-             capa_mime || 'image/jpeg', capa_base64 || null);
-
-      res.status(201).json({ id: result.lastInsertRowid, titulo });
+      const result = await knex('livros').insert({
+        isbn:           isbn           || null,
+        titulo,
+        subtitulo:      subtitulo      || null,
+        id_autor:       id_autor       || null,
+        id_editora:     id_editora     || null,
+        id_categoria:   id_categoria   || null,
+        ano_publicacao: ano_publicacao || null,
+        edicao:         edicao         || null,
+        num_paginas:    num_paginas    || null,
+        idioma:         idioma         || 'Português',
+        localizacao:    localizacao    || null,
+        descricao:      descricao      || null,
+        capa_url:       capa_url       || null,
+        capa_mime:      capa_mime      || 'image/jpeg',
+        capa_base64:    capa_base64    || null,
+      }).returning('id');
+      const id = typeof result[0] === 'object' ? result[0].id : result[0];
+      res.status(201).json({ id, titulo });
     } catch (e) {
-      if (e.message.includes('UNIQUE')) return res.status(409).json({ erro: 'ISBN já cadastrado.' });
+      if (e.message.includes('UNIQUE') || e.message.includes('unique')) return res.status(409).json({ erro: 'ISBN já cadastrado.' });
       throw e;
     }
   },
 
-  atualizar(req, res) {
-    const db = getDb();
-    const atual = db.prepare('SELECT * FROM livros WHERE id = ?').get(req.params.id);
+  async atualizar(req, res) {
+    const knex = getDb();
+    const atual = row(await knex.raw('SELECT * FROM livros WHERE id = ?', [req.params.id]));
     if (!atual) return res.status(404).json({ erro: 'Livro não encontrado.' });
 
     const campos = ['isbn', 'titulo', 'subtitulo', 'id_autor', 'id_editora', 'id_categoria',
                     'ano_publicacao', 'edicao', 'num_paginas', 'idioma', 'localizacao', 'descricao',
                     'capa_url', 'capa_mime', 'capa_base64'];
-    const sets = campos.map(c => `${c} = ?`).join(', ');
-    const values = campos.map(c => req.body[c] !== undefined ? req.body[c] : atual[c]);
+    const updates = {};
+    for (const c of campos) {
+      updates[c] = req.body[c] !== undefined ? req.body[c] : atual[c];
+    }
 
     try {
-      db.prepare(`UPDATE livros SET ${sets} WHERE id = ?`).run(...values, req.params.id);
+      await knex('livros').where({ id: req.params.id }).update(updates);
       res.json({ mensagem: 'Livro atualizado com sucesso.' });
     } catch (e) {
-      if (e.message.includes('UNIQUE')) return res.status(409).json({ erro: 'ISBN já cadastrado em outro livro.' });
+      if (e.message.includes('UNIQUE') || e.message.includes('unique')) return res.status(409).json({ erro: 'ISBN já cadastrado em outro livro.' });
       throw e;
     }
   },
 
   /* GET /api/livros/:id/capa — serve cover image from DB */
-  servirCapa(req, res) {
-    const db = getDb();
-    const livro = db.prepare('SELECT capa_base64, capa_mime, capa_url FROM livros WHERE id = ?').get(req.params.id);
+  async servirCapa(req, res) {
+    const knex = getDb();
+    const livro = row(await knex.raw('SELECT capa_base64, capa_mime, capa_url FROM livros WHERE id = ?', [req.params.id]));
     if (!livro) return res.status(404).json({ erro: 'Livro não encontrado.' });
 
     if (livro.capa_base64) {
@@ -154,62 +167,67 @@ const livrosController = {
     res.status(404).json({ erro: 'Capa não disponível.' });
   },
 
-  remover(req, res) {
-    const db = getDb();
-    const livro = db.prepare('SELECT * FROM livros WHERE id = ?').get(req.params.id);
+  async remover(req, res) {
+    const knex = getDb();
+    const livro = row(await knex.raw('SELECT * FROM livros WHERE id = ?', [req.params.id]));
     if (!livro) return res.status(404).json({ erro: 'Livro não encontrado.' });
-    const empAtivos = db.prepare(`
+    const empAtivos = row(await knex.raw(`
       SELECT COUNT(*) as c FROM emprestimos em
       JOIN exemplares ex ON ex.id = em.id_exemplar
       WHERE ex.id_livro = ? AND em.status IN ('Ativo', 'Atrasado')
-    `).get(req.params.id);
-    if (empAtivos.c > 0) return res.status(409).json({ erro: 'Livro possui empréstimos ativos. Não pode ser removido.' });
-    db.prepare('DELETE FROM livros WHERE id = ?').run(req.params.id);
+    `, [req.params.id]));
+    if (Number(empAtivos.c) > 0) return res.status(409).json({ erro: 'Livro possui empréstimos ativos. Não pode ser removido.' });
+    await knex('livros').where({ id: req.params.id }).delete();
     res.json({ mensagem: 'Livro removido com sucesso.' });
   },
 
   // --- Exemplares ---
-  listarExemplares(req, res) {
-    const db = getDb();
-    const livro = db.prepare('SELECT id, titulo FROM livros WHERE id = ?').get(req.params.id);
+  async listarExemplares(req, res) {
+    const knex = getDb();
+    const livro = row(await knex.raw('SELECT id, titulo FROM livros WHERE id = ?', [req.params.id]));
     if (!livro) return res.status(404).json({ erro: 'Livro não encontrado.' });
-    const exemplares = db.prepare('SELECT * FROM exemplares WHERE id_livro = ? ORDER BY num_tombo').all(req.params.id);
+    const exemplares = rows(await knex.raw('SELECT * FROM exemplares WHERE id_livro = ? ORDER BY num_tombo', [req.params.id]));
     res.json({ livro, exemplares });
   },
 
-  adicionarExemplar(req, res) {
-    const db = getDb();
-    const livro = db.prepare('SELECT id FROM livros WHERE id = ?').get(req.params.id);
+  async adicionarExemplar(req, res) {
+    const knex = getDb();
+    const livro = row(await knex.raw('SELECT id FROM livros WHERE id = ?', [req.params.id]));
     if (!livro) return res.status(404).json({ erro: 'Livro não encontrado.' });
     const { num_tombo, condicao, data_aquisicao } = req.body;
     try {
-      const result = db.prepare(`
-        INSERT INTO exemplares (id_livro, num_tombo, condicao, data_aquisicao)
-        VALUES (?, ?, ?, ?)
-      `).run(req.params.id, num_tombo, condicao || 'Bom', data_aquisicao || null);
-      res.status(201).json({ id: result.lastInsertRowid, id_livro: Number(req.params.id), num_tombo, condicao });
+      const result = await knex('exemplares').insert({
+        id_livro:       Number(req.params.id),
+        num_tombo,
+        condicao:       condicao       || 'Bom',
+        data_aquisicao: data_aquisicao || null,
+      }).returning('id');
+      const id = typeof result[0] === 'object' ? result[0].id : result[0];
+      res.status(201).json({ id, id_livro: Number(req.params.id), num_tombo, condicao });
     } catch (e) {
-      if (e.message.includes('UNIQUE')) return res.status(409).json({ erro: 'Número de tombo já cadastrado.' });
+      if (e.message.includes('UNIQUE') || e.message.includes('unique')) return res.status(409).json({ erro: 'Número de tombo já cadastrado.' });
       throw e;
     }
   },
 
-  atualizarExemplar(req, res) {
-    const db = getDb();
-    const exemplar = db.prepare('SELECT * FROM exemplares WHERE id = ? AND id_livro = ?').get(req.params.exemplarId, req.params.id);
+  async atualizarExemplar(req, res) {
+    const knex = getDb();
+    const exemplar = row(await knex.raw('SELECT * FROM exemplares WHERE id = ? AND id_livro = ?', [req.params.exemplarId, req.params.id]));
     if (!exemplar) return res.status(404).json({ erro: 'Exemplar não encontrado.' });
     const { condicao, data_aquisicao } = req.body;
-    db.prepare('UPDATE exemplares SET condicao = ?, data_aquisicao = ? WHERE id = ?')
-      .run(condicao ?? exemplar.condicao, data_aquisicao ?? exemplar.data_aquisicao, exemplar.id);
+    await knex('exemplares').where({ id: exemplar.id }).update({
+      condicao:       condicao       ?? exemplar.condicao,
+      data_aquisicao: data_aquisicao ?? exemplar.data_aquisicao,
+    });
     res.json({ mensagem: 'Exemplar atualizado com sucesso.' });
   },
 
-  removerExemplar(req, res) {
-    const db = getDb();
-    const exemplar = db.prepare('SELECT * FROM exemplares WHERE id = ? AND id_livro = ?').get(req.params.exemplarId, req.params.id);
+  async removerExemplar(req, res) {
+    const knex = getDb();
+    const exemplar = row(await knex.raw('SELECT * FROM exemplares WHERE id = ? AND id_livro = ?', [req.params.exemplarId, req.params.id]));
     if (!exemplar) return res.status(404).json({ erro: 'Exemplar não encontrado.' });
     if (!exemplar.disponivel) return res.status(409).json({ erro: 'Exemplar está emprestado. Não pode ser removido.' });
-    db.prepare('DELETE FROM exemplares WHERE id = ?').run(exemplar.id);
+    await knex('exemplares').where({ id: exemplar.id }).delete();
     res.json({ mensagem: 'Exemplar removido com sucesso.' });
   },
 };

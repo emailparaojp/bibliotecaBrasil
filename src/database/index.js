@@ -1,27 +1,42 @@
 'use strict';
 
 require('dotenv').config();
-const Database = require('better-sqlite3');
 const path = require('path');
-const fs = require('fs');
 
-const DB_PATH = path.resolve(process.env.DB_PATH || './biblioteca.db');
-
-let db;
+let knex;
 
 function getDb() {
-  if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
+  if (!knex) {
+    if (process.env.DATABASE_URL) {
+      knex = require('knex')({
+        client: 'pg',
+        connection: process.env.DATABASE_URL,
+        pool: { min: 2, max: 10 },
+        searchPath: ['public'],
+      });
+    } else {
+      const DB_PATH = path.resolve(process.env.DB_PATH || './biblioteca.db');
+      knex = require('knex')({
+        client: 'better-sqlite3',
+        connection: { filename: DB_PATH },
+        useNullAsDefault: true,
+        pool: {
+          afterCreate(conn, cb) {
+            conn.pragma('journal_mode = WAL');
+            conn.pragma('foreign_keys = ON');
+            cb(null, conn);
+          },
+        },
+      });
+    }
   }
-  return db;
+  return knex;
 }
 
-function closeDb() {
-  if (db) {
-    db.close();
-    db = null;
+async function closeDb() {
+  if (knex) {
+    await knex.destroy();
+    knex = null;
   }
 }
 

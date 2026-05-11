@@ -2,7 +2,6 @@
 
 const { getDb } = require('../database');
 
-// Regras de negócio por tipo de membro
 const REGRAS = {
   Estudante: {
     diasEmprestimo: Number(process.env.DIAS_EMPRESTIMO_ESTUDANTE || 7),
@@ -20,6 +19,9 @@ const REGRAS = {
 const MAX_RENOVACOES = Number(process.env.MAX_RENOVACOES || 2);
 const MULTA_DIARIA   = Number(process.env.MULTA_DIARIA || 0.50);
 
+function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
+function row(r)  { return rows(r)[0] ?? null; }
+
 function somarDias(dataStr, dias) {
   const d = new Date(dataStr + 'T12:00:00');
   d.setDate(d.getDate() + dias);
@@ -36,18 +38,17 @@ function diasEntre(de, ate) {
   return Math.floor((b - a) / 86400000);
 }
 
-// Marca empréstimos vencidos como Atrasado
-function atualizarAtrasos(db) {
-  db.prepare(`
-    UPDATE emprestimos SET status = 'Atrasado'
-    WHERE status = 'Ativo' AND data_prevista_devolucao < date('now')
-  `).run();
+async function atualizarAtrasos(knex) {
+  await knex('emprestimos')
+    .where('status', 'Ativo')
+    .where('data_prevista_devolucao', '<', knex.raw('CURRENT_DATE'))
+    .update({ status: 'Atrasado' });
 }
 
 const emprestimosController = {
-  listar(req, res) {
-    const db = getDb();
-    atualizarAtrasos(db);
+  async listar(req, res) {
+    const knex = getDb();
+    await atualizarAtrasos(knex);
     const { status, id_membro, id_livro, page = 1, limit = 20 } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
 
@@ -58,12 +59,12 @@ const emprestimosController = {
     if (id_livro)  { where.push('ex.id_livro = ?');  params.push(Number(id_livro)); }
 
     const wc = where.length ? 'WHERE ' + where.join(' AND ') : '';
-    const total = db.prepare(`
+    const totalRow = row(await knex.raw(`
       SELECT COUNT(*) as c FROM emprestimos em
       JOIN exemplares ex ON ex.id = em.id_exemplar ${wc}
-    `).get(...params).c;
+    `, params));
 
-    const emprestimos = db.prepare(`
+    const emprestimos = rows(await knex.raw(`
       SELECT em.id, em.data_emprestimo, em.data_prevista_devolucao, em.data_devolucao,
              em.num_renovacoes, em.status,
              m.id as membro_id, m.nome as membro_nome,
@@ -81,15 +82,15 @@ const emprestimosController = {
       ${wc}
       ORDER BY em.data_emprestimo DESC
       LIMIT ? OFFSET ?
-    `).all(...params, Number(limit), offset);
+    `, [...params, Number(limit), offset]));
 
-    res.json({ total, pagina: Number(page), limite: Number(limit), emprestimos });
+    res.json({ total: Number(totalRow.c), pagina: Number(page), limite: Number(limit), emprestimos });
   },
 
-  buscarPorId(req, res) {
-    const db = getDb();
-    atualizarAtrasos(db);
-    const emp = db.prepare(`
+  async buscarPorId(req, res) {
+    const knex = getDb();
+    await atualizarAtrasos(knex);
+    const emp = row(await knex.raw(`
       SELECT em.*,
              m.nome as membro_nome, m.tipo as membro_tipo,
              l.titulo as livro_titulo, l.isbn,
@@ -104,62 +105,56 @@ const emprestimosController = {
       JOIN membros m ON m.id = em.id_membro
       LEFT JOIN multas mu ON mu.id_emprestimo = em.id
       WHERE em.id = ?
-    `).get(req.params.id);
+    `, [req.params.id]));
     if (!emp) return res.status(404).json({ erro: 'Empréstimo não encontrado.' });
     res.json(emp);
   },
 
-  realizar(req, res) {
-    const db = getDb();
+  async realizar(req, res) {
+    const knex = getDb();
     const { id_exemplar, id_membro } = req.body;
 
-    // Valida membro
-    const membro = db.prepare('SELECT * FROM membros WHERE id = ?').get(id_membro);
-    if (!membro)      return res.status(404).json({ erro: 'Membro não encontrado.' });
+    const membro = row(await knex.raw('SELECT * FROM membros WHERE id = ?', [id_membro]));
+    if (!membro)       return res.status(404).json({ erro: 'Membro não encontrado.' });
     if (!membro.ativo) return res.status(400).json({ erro: 'Membro inativo.' });
     if (membro.data_validade < hoje()) return res.status(400).json({ erro: 'Matrícula do membro expirada. Renove antes de emprestar.' });
 
-    // Verifica multas pendentes
-    const multasPend = db.prepare("SELECT COALESCE(SUM(valor), 0) as total FROM multas WHERE id_membro = ? AND pago = 0").get(id_membro);
-    if (multasPend.total > 0) return res.status(400).json({ erro: `Membro possui R$ ${multasPend.total.toFixed(2)} em multas pendentes. Quite antes de realizar novo empréstimo.` });
+    const multasPend = row(await knex.raw("SELECT COALESCE(SUM(valor), 0) as total FROM multas WHERE id_membro = ? AND pago = 0", [id_membro]));
+    if (Number(multasPend.total) > 0) return res.status(400).json({ erro: `Membro possui R$ ${Number(multasPend.total).toFixed(2)} em multas pendentes. Quite antes de realizar novo empréstimo.` });
 
-    // Verifica limite de empréstimos ativos
     const regras = REGRAS[membro.tipo] || REGRAS.Comum;
-    const ativos = db.prepare("SELECT COUNT(*) as c FROM emprestimos WHERE id_membro = ? AND status IN ('Ativo', 'Atrasado')").get(id_membro);
-    if (ativos.c >= regras.maxEmprestimos) return res.status(400).json({ erro: `Limite de ${regras.maxEmprestimos} empréstimo(s) simultâneo(s) atingido para ${membro.tipo}.` });
+    const ativos = row(await knex.raw("SELECT COUNT(*) as c FROM emprestimos WHERE id_membro = ? AND status IN ('Ativo', 'Atrasado')", [id_membro]));
+    if (Number(ativos.c) >= regras.maxEmprestimos) return res.status(400).json({ erro: `Limite de ${regras.maxEmprestimos} empréstimo(s) simultâneo(s) atingido para ${membro.tipo}.` });
 
-    // Valida exemplar
-    const exemplar = db.prepare('SELECT * FROM exemplares WHERE id = ?').get(id_exemplar);
-    if (!exemplar)         return res.status(404).json({ erro: 'Exemplar não encontrado.' });
+    const exemplar = row(await knex.raw('SELECT * FROM exemplares WHERE id = ?', [id_exemplar]));
+    if (!exemplar)            return res.status(404).json({ erro: 'Exemplar não encontrado.' });
     if (!exemplar.disponivel) return res.status(400).json({ erro: 'Exemplar não está disponível para empréstimo.' });
 
-    // Verifica se membro já tem este livro emprestado
-    const duplicado = db.prepare(`
+    const duplicado = row(await knex.raw(`
       SELECT COUNT(*) as c FROM emprestimos em
       JOIN exemplares ex ON ex.id = em.id_exemplar
       WHERE em.id_membro = ? AND ex.id_livro = ? AND em.status IN ('Ativo', 'Atrasado')
-    `).get(id_membro, exemplar.id_livro);
-    if (duplicado.c > 0) return res.status(400).json({ erro: 'Membro já possui este livro emprestado.' });
+    `, [id_membro, exemplar.id_livro]));
+    if (Number(duplicado.c) > 0) return res.status(400).json({ erro: 'Membro já possui este livro emprestado.' });
 
     const dataPrevista = somarDias(hoje(), regras.diasEmprestimo);
 
-    const realizarEmp = db.transaction(() => {
-      const result = db.prepare(`
-        INSERT INTO emprestimos (id_exemplar, id_membro, data_prevista_devolucao)
-        VALUES (?, ?, ?)
-      `).run(id_exemplar, id_membro, dataPrevista);
-      db.prepare('UPDATE exemplares SET disponivel = 0 WHERE id = ?').run(id_exemplar);
+    const empId = await knex.transaction(async (trx) => {
+      const result = await trx('emprestimos').insert({
+        id_exemplar,
+        id_membro,
+        data_prevista_devolucao: dataPrevista,
+      }).returning('id');
+      const id = typeof result[0] === 'object' ? result[0].id : result[0];
 
-      // Se havia reserva ativa do membro para este livro, marca como Concluída
-      db.prepare(`
-        UPDATE reservas SET status = 'Concluida'
-        WHERE id_membro = ? AND id_livro = ? AND status = 'Ativa'
-      `).run(id_membro, exemplar.id_livro);
+      await trx('exemplares').where({ id: id_exemplar }).update({ disponivel: 0 });
+      await trx('reservas')
+        .where({ id_membro, id_livro: exemplar.id_livro, status: 'Ativa' })
+        .update({ status: 'Concluida' });
 
-      return result.lastInsertRowid;
+      return id;
     });
 
-    const empId = realizarEmp();
     res.status(201).json({
       id: empId,
       mensagem: 'Empréstimo realizado com sucesso.',
@@ -167,96 +162,90 @@ const emprestimosController = {
     });
   },
 
-  devolver(req, res) {
-    const db = getDb();
-    atualizarAtrasos(db);
-    const emp = db.prepare(`
+  async devolver(req, res) {
+    const knex = getDb();
+    await atualizarAtrasos(knex);
+    const emp = row(await knex.raw(`
       SELECT em.*, ex.id_livro, m.tipo as membro_tipo
       FROM emprestimos em
       JOIN exemplares ex ON ex.id = em.id_exemplar
       JOIN membros m ON m.id = em.id_membro
       WHERE em.id = ?
-    `).get(req.params.id);
+    `, [req.params.id]));
     if (!emp) return res.status(404).json({ erro: 'Empréstimo não encontrado.' });
     if (emp.status === 'Devolvido') return res.status(400).json({ erro: 'Livro já devolvido.' });
 
     const dataDevolvido = hoje();
     let multaCriada = null;
+    let proximaReserva = null;
 
-    const devolverTx = db.transaction(() => {
-      db.prepare("UPDATE emprestimos SET status = 'Devolvido', data_devolucao = ? WHERE id = ?")
-        .run(dataDevolvido, emp.id);
-      db.prepare('UPDATE exemplares SET disponivel = 1 WHERE id = ?').run(emp.id_exemplar);
+    await knex.transaction(async (trx) => {
+      await trx('emprestimos').where({ id: emp.id }).update({ status: 'Devolvido', data_devolucao: dataDevolvido });
+      await trx('exemplares').where({ id: emp.id_exemplar }).update({ disponivel: 1 });
 
-      // Gera multa se houver atraso
       const diasAtraso = diasEntre(emp.data_prevista_devolucao, dataDevolvido);
       if (diasAtraso > 0) {
         const valor = diasAtraso * MULTA_DIARIA;
         const motivo = `Devolução com ${diasAtraso} dia(s) de atraso.`;
-        const multaResult = db.prepare(`
-          INSERT INTO multas (id_emprestimo, id_membro, valor, motivo)
-          VALUES (?, ?, ?, ?)
-        `).run(emp.id, emp.id_membro, valor, motivo);
-        multaCriada = { id: multaResult.lastInsertRowid, valor, motivo, dias_atraso: diasAtraso };
+        const multaResult = await trx('multas').insert({
+          id_emprestimo: emp.id,
+          id_membro:     emp.id_membro,
+          valor,
+          motivo,
+        }).returning('id');
+        const multaId = typeof multaResult[0] === 'object' ? multaResult[0].id : multaResult[0];
+        multaCriada = { id: multaId, valor, motivo, dias_atraso: diasAtraso };
       }
 
-      // Verifica próxima reserva ativa para este livro e notifica (flag)
-      const proximaReserva = db.prepare(`
+      proximaReserva = row(await trx.raw(`
         SELECT r.id, r.id_membro, m.nome as membro_nome, m.email
         FROM reservas r
         JOIN membros m ON m.id = r.id_membro
         WHERE r.id_livro = ? AND r.status = 'Ativa'
         ORDER BY r.data_reserva ASC LIMIT 1
-      `).get(emp.id_livro);
-
-      return proximaReserva;
+      `, [emp.id_livro]));
     });
 
-    const proximaReserva = devolverTx();
     const resp = { mensagem: 'Devolução registrada com sucesso.', data_devolucao: dataDevolvido };
     if (multaCriada) resp.multa_gerada = multaCriada;
     if (proximaReserva) resp.aviso_reserva = { mensagem: `Livro reservado por ${proximaReserva.membro_nome}`, reserva_id: proximaReserva.id };
     res.json(resp);
   },
 
-  renovar(req, res) {
-    const db = getDb();
-    atualizarAtrasos(db);
-    const emp = db.prepare(`
+  async renovar(req, res) {
+    const knex = getDb();
+    await atualizarAtrasos(knex);
+    const emp = row(await knex.raw(`
       SELECT em.*, m.tipo as membro_tipo, ex.id_livro
       FROM emprestimos em
       JOIN membros m ON m.id = em.id_membro
       JOIN exemplares ex ON ex.id = em.id_exemplar
       WHERE em.id = ?
-    `).get(req.params.id);
+    `, [req.params.id]));
     if (!emp) return res.status(404).json({ erro: 'Empréstimo não encontrado.' });
     if (emp.status === 'Devolvido') return res.status(400).json({ erro: 'Empréstimo já devolvido.' });
     if (emp.status === 'Atrasado')  return res.status(400).json({ erro: 'Não é possível renovar empréstimo em atraso. Devolva o livro e quite a multa.' });
     if (emp.num_renovacoes >= MAX_RENOVACOES) return res.status(400).json({ erro: `Limite de ${MAX_RENOVACOES} renovação(ões) atingido.` });
 
-    // Verifica se há reserva ativa para o livro
-    const reservaExiste = db.prepare(`
-      SELECT COUNT(*) as c FROM reservas
-      WHERE id_livro = ? AND status = 'Ativa'
-    `).get(emp.id_livro);
-    if (reservaExiste.c > 0) return res.status(400).json({ erro: 'Não é possível renovar: há reserva ativa para este livro por outro membro.' });
+    const reservaExiste = row(await knex.raw("SELECT COUNT(*) as c FROM reservas WHERE id_livro = ? AND status = 'Ativa'", [emp.id_livro]));
+    if (Number(reservaExiste.c) > 0) return res.status(400).json({ erro: 'Não é possível renovar: há reserva ativa para este livro por outro membro.' });
 
     const regras = REGRAS[emp.membro_tipo] || REGRAS.Comum;
     const novaData = somarDias(emp.data_prevista_devolucao, regras.diasEmprestimo);
 
-    db.prepare(`
-      UPDATE emprestimos
-      SET data_prevista_devolucao = ?, num_renovacoes = num_renovacoes + 1, status = 'Ativo'
-      WHERE id = ?
-    `).run(novaData, emp.id);
+    await knex('emprestimos').where({ id: emp.id }).update({
+      data_prevista_devolucao: novaData,
+      num_renovacoes: knex.raw('num_renovacoes + 1'),
+      status: 'Ativo',
+    });
 
     res.json({ mensagem: 'Empréstimo renovado com sucesso.', nova_data_devolucao: novaData, renovacoes_restantes: MAX_RENOVACOES - (emp.num_renovacoes + 1) });
   },
 
-  atrasados(req, res) {
-    const db = getDb();
-    atualizarAtrasos(db);
-    const atrasados = db.prepare(`
+  async atrasados(req, res) {
+    const knex = getDb();
+    await atualizarAtrasos(knex);
+    const atrasados = rows(await knex.raw(`
       SELECT em.id, em.data_emprestimo, em.data_prevista_devolucao,
              CAST((julianday('now') - julianday(em.data_prevista_devolucao)) AS INTEGER) as dias_atraso,
              CAST((julianday('now') - julianday(em.data_prevista_devolucao)) AS INTEGER) * ? as multa_estimada,
@@ -268,7 +257,7 @@ const emprestimosController = {
       JOIN livros l ON l.id = ex.id_livro
       WHERE em.status = 'Atrasado'
       ORDER BY dias_atraso DESC
-    `).all(MULTA_DIARIA);
+    `, [MULTA_DIARIA]));
     res.json({ total: atrasados.length, multa_diaria: MULTA_DIARIA, atrasados });
   },
 };

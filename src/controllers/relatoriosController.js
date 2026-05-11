@@ -2,15 +2,18 @@
 
 const { getDb } = require('../database');
 
-const relatoriosController = {
-  acervo(req, res) {
-    const db = getDb();
-    const totalLivros     = db.prepare('SELECT COUNT(*) as c FROM livros').get().c;
-    const totalExemplares = db.prepare('SELECT COUNT(*) as c FROM exemplares').get().c;
-    const disponiveis     = db.prepare('SELECT COUNT(*) as c FROM exemplares WHERE disponivel = 1').get().c;
-    const emprestados     = db.prepare('SELECT COUNT(*) as c FROM exemplares WHERE disponivel = 0').get().c;
+function rows(r) { return Array.isArray(r) ? r : (r.rows || []); }
+function row(r)  { return rows(r)[0] ?? null; }
 
-    const porCategoria = db.prepare(`
+const relatoriosController = {
+  async acervo(req, res) {
+    const knex = getDb();
+    const totalLivros     = (await knex('livros').count('id as c').first()).c;
+    const totalExemplares = (await knex('exemplares').count('id as c').first()).c;
+    const disponiveis     = (await knex('exemplares').where({ disponivel: 1 }).count('id as c').first()).c;
+    const emprestados     = (await knex('exemplares').where({ disponivel: 0 }).count('id as c').first()).c;
+
+    const porCategoria = rows(await knex.raw(`
       SELECT c.nome as categoria,
              COUNT(DISTINCT l.id) as total_livros,
              COUNT(e.id) as total_exemplares,
@@ -19,22 +22,22 @@ const relatoriosController = {
       LEFT JOIN livros l ON l.id_categoria = c.id
       LEFT JOIN exemplares e ON e.id_livro = l.id
       GROUP BY c.id ORDER BY total_livros DESC
-    `).all();
+    `));
 
-    const porCondicao = db.prepare(`
+    const porCondicao = rows(await knex.raw(`
       SELECT condicao, COUNT(*) as total
       FROM exemplares GROUP BY condicao
-    `).all();
+    `));
 
     res.json({
-      resumo: { totalLivros, totalExemplares, disponiveis, emprestados },
+      resumo: { totalLivros: Number(totalLivros), totalExemplares: Number(totalExemplares), disponiveis: Number(disponiveis), emprestados: Number(emprestados) },
       porCategoria,
       porCondicao,
     });
   },
 
-  livrosMaisEmprestados(req, res) {
-    const db = getDb();
+  async livrosMaisEmprestados(req, res) {
+    const knex = getDb();
     const { limit = 10, periodo_dias } = req.query;
 
     let where = '';
@@ -44,7 +47,7 @@ const relatoriosController = {
       params.push(Number(periodo_dias));
     }
 
-    const livros = db.prepare(`
+    const livros = rows(await knex.raw(`
       SELECT l.id, l.titulo, l.isbn,
              a.nome as autor,
              c.nome as categoria,
@@ -59,15 +62,15 @@ const relatoriosController = {
       GROUP BY l.id
       ORDER BY total_emprestimos DESC
       LIMIT ?
-    `).all(...params, Number(limit));
+    `, [...params, Number(limit)]));
 
     res.json(livros);
   },
 
-  membrosAtivos(req, res) {
-    const db = getDb();
+  async membrosAtivos(req, res) {
+    const knex = getDb();
     const { limit = 10 } = req.query;
-    const membros = db.prepare(`
+    const membros = rows(await knex.raw(`
       SELECT m.id, m.nome, m.tipo,
              COUNT(em.id) as total_emprestimos,
              COUNT(CASE WHEN em.status IN ('Ativo', 'Atrasado') THEN 1 END) as emprestimos_ativos
@@ -76,42 +79,42 @@ const relatoriosController = {
       GROUP BY m.id
       ORDER BY total_emprestimos DESC
       LIMIT ?
-    `).all(Number(limit));
+    `, [Number(limit)]));
     res.json(membros);
   },
 
-  situacaoEmprestimos(req, res) {
-    const db = getDb();
-    db.prepare(`
-      UPDATE emprestimos SET status = 'Atrasado'
-      WHERE status = 'Ativo' AND data_prevista_devolucao < date('now')
-    `).run();
+  async situacaoEmprestimos(req, res) {
+    const knex = getDb();
+    await knex('emprestimos')
+      .where('status', 'Ativo')
+      .where('data_prevista_devolucao', '<', knex.raw('CURRENT_DATE'))
+      .update({ status: 'Atrasado' });
 
-    const porStatus = db.prepare(`
+    const porStatus = rows(await knex.raw(`
       SELECT status, COUNT(*) as total FROM emprestimos GROUP BY status
-    `).all();
+    `));
 
-    const atrasadosPorTipo = db.prepare(`
+    const atrasadosPorTipo = rows(await knex.raw(`
       SELECT m.tipo, COUNT(*) as total_atrasados,
              SUM(CAST((julianday('now') - julianday(em.data_prevista_devolucao)) AS INTEGER)) as total_dias_atraso
       FROM emprestimos em
       JOIN membros m ON m.id = em.id_membro
       WHERE em.status = 'Atrasado'
       GROUP BY m.tipo
-    `).all();
+    `));
 
-    const multasPendentes = db.prepare(`
+    const multasPendentes = row(await knex.raw(`
       SELECT COUNT(*) as total_multas, ROUND(SUM(valor), 2) as total_valor
       FROM multas WHERE pago = 0
-    `).get();
+    `));
 
     res.json({ porStatus, atrasadosPorTipo, multasPendentes });
   },
 
-  devolucoesPrevistas(req, res) {
-    const db = getDb();
+  async devolucoesPrevistas(req, res) {
+    const knex = getDb();
     const { dias = 7 } = req.query;
-    const devolucoes = db.prepare(`
+    const devolucoes = rows(await knex.raw(`
       SELECT em.id, em.data_prevista_devolucao,
              m.nome as membro_nome, m.email, m.telefone,
              l.titulo as livro_titulo, ex.num_tombo,
@@ -123,13 +126,13 @@ const relatoriosController = {
       WHERE em.status IN ('Ativo', 'Atrasado')
         AND em.data_prevista_devolucao BETWEEN date('now') AND date('now', '+' || ? || ' days')
       ORDER BY em.data_prevista_devolucao ASC
-    `).all(Number(dias));
+    `, [Number(dias)]));
     res.json({ dias_horizonte: Number(dias), total: devolucoes.length, devolucoes });
   },
 
-  inventario(req, res) {
-    const db = getDb();
-    const livros = db.prepare(`
+  async inventario(req, res) {
+    const knex = getDb();
+    const livros = rows(await knex.raw(`
       SELECT l.id, l.isbn, l.titulo, l.localizacao,
              a.nome as autor,
              c.nome as categoria,
@@ -143,13 +146,13 @@ const relatoriosController = {
       LEFT JOIN exemplares e ON e.id_livro = l.id
       GROUP BY l.id
       ORDER BY l.localizacao, l.titulo
-    `).all();
+    `));
     res.json({ total: livros.length, livros });
   },
 
-  financeiroMultas(req, res) {
-    const db = getDb();
-    const resumo = db.prepare(`
+  async financeiroMultas(req, res) {
+    const knex = getDb();
+    const resumo = row(await knex.raw(`
       SELECT
         COUNT(*) as total_multas,
         COUNT(CASE WHEN pago = 0 THEN 1 END) as multas_pendentes,
@@ -158,23 +161,23 @@ const relatoriosController = {
         ROUND(SUM(CASE WHEN pago = 0 THEN valor ELSE 0 END), 2) as valor_pendente,
         ROUND(SUM(CASE WHEN pago = 1 THEN valor ELSE 0 END), 2) as valor_recebido
       FROM multas
-    `).get();
+    `));
 
-    const porMes = db.prepare(`
+    const porMes = rows(await knex.raw(`
       SELECT strftime('%Y-%m', data_geracao) as mes,
              COUNT(*) as total,
              ROUND(SUM(valor), 2) as valor_gerado,
              ROUND(SUM(CASE WHEN pago = 1 THEN valor ELSE 0 END), 2) as valor_recebido
       FROM multas
       GROUP BY mes ORDER BY mes DESC LIMIT 12
-    `).all();
+    `));
 
     res.json({ resumo, porMes });
   },
 
-  membrosComMultasPendentes(req, res) {
-    const db = getDb();
-    const membros = db.prepare(`
+  async membrosComMultasPendentes(req, res) {
+    const knex = getDb();
+    const membros = rows(await knex.raw(`
       SELECT m.id, m.nome, m.email, m.telefone, m.tipo,
              COUNT(mu.id) as total_multas,
              ROUND(SUM(mu.valor), 2) as total_pendente
@@ -183,31 +186,37 @@ const relatoriosController = {
       WHERE mu.pago = 0
       GROUP BY m.id
       ORDER BY total_pendente DESC
-    `).all();
+    `));
     res.json({ total: membros.length, membros });
   },
 
-  dashboard(req, res) {
-    const db = getDb();
-    db.prepare("UPDATE emprestimos SET status = 'Atrasado' WHERE status = 'Ativo' AND data_prevista_devolucao < date('now')").run();
-    db.prepare("UPDATE reservas SET status = 'Expirada' WHERE status = 'Ativa' AND data_expiracao < date('now')").run();
+  async dashboard(req, res) {
+    const knex = getDb();
+    await knex('emprestimos')
+      .where('status', 'Ativo')
+      .where('data_prevista_devolucao', '<', knex.raw('CURRENT_DATE'))
+      .update({ status: 'Atrasado' });
+    await knex('reservas')
+      .where('status', 'Ativa')
+      .where('data_expiracao', '<', knex.raw('CURRENT_DATE'))
+      .update({ status: 'Expirada' });
 
-    const totalLivros     = db.prepare('SELECT COUNT(*) as c FROM livros').get().c;
-    const totalExemplares = db.prepare('SELECT COUNT(*) as c FROM exemplares').get().c;
-    const totalMembros    = db.prepare('SELECT COUNT(*) as c FROM membros WHERE ativo = 1').get().c;
-    const empAtivos       = db.prepare("SELECT COUNT(*) as c FROM emprestimos WHERE status IN ('Ativo', 'Atrasado')").get().c;
-    const empAtrasados    = db.prepare("SELECT COUNT(*) as c FROM emprestimos WHERE status = 'Atrasado'").get().c;
-    const reservasAtivas  = db.prepare("SELECT COUNT(*) as c FROM reservas WHERE status = 'Ativa'").get().c;
-    const multasPendentes = db.prepare('SELECT COUNT(*) as c, ROUND(COALESCE(SUM(valor),0),2) as valor FROM multas WHERE pago = 0').get();
-    const empHoje         = db.prepare("SELECT COUNT(*) as c FROM emprestimos WHERE date(created_at) = date('now')").get().c;
-    const devHoje         = db.prepare("SELECT COUNT(*) as c FROM emprestimos WHERE data_devolucao = date('now')").get().c;
+    const totalLivros     = Number((await knex('livros').count('id as c').first()).c);
+    const totalExemplares = Number((await knex('exemplares').count('id as c').first()).c);
+    const totalMembros    = Number((await knex('membros').where({ ativo: 1 }).count('id as c').first()).c);
+    const empAtivos       = Number((await knex('emprestimos').whereIn('status', ['Ativo', 'Atrasado']).count('id as c').first()).c);
+    const empAtrasados    = Number((await knex('emprestimos').where({ status: 'Atrasado' }).count('id as c').first()).c);
+    const reservasAtivas  = Number((await knex('reservas').where({ status: 'Ativa' }).count('id as c').first()).c);
+    const multasPendentes = row(await knex.raw('SELECT COUNT(*) as c, ROUND(COALESCE(SUM(valor),0),2) as valor FROM multas WHERE pago = 0'));
+    const empHoje         = Number((await knex('emprestimos').whereRaw("date(created_at) = date('now')").count('id as c').first()).c);
+    const devHoje         = Number((await knex('emprestimos').whereRaw("data_devolucao = date('now')").count('id as c').first()).c);
 
     res.json({
-      acervo:     { livros: totalLivros, exemplares: totalExemplares },
-      membros:    { ativos: totalMembros },
-      emprestimos:{ ativos: empAtivos, atrasados: empAtrasados, realizados_hoje: empHoje, devolucoes_hoje: devHoje },
-      reservas:   { ativas: reservasAtivas },
-      multas:     { quantidade_pendente: multasPendentes.c, valor_pendente: multasPendentes.valor },
+      acervo:      { livros: totalLivros, exemplares: totalExemplares },
+      membros:     { ativos: totalMembros },
+      emprestimos: { ativos: empAtivos, atrasados: empAtrasados, realizados_hoje: empHoje, devolucoes_hoje: devHoje },
+      reservas:    { ativas: reservasAtivas },
+      multas:      { quantidade_pendente: Number(multasPendentes.c), valor_pendente: multasPendentes.valor },
     });
   },
 };
